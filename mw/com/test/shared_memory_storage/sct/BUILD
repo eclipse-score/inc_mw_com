@@ -1,0 +1,24 @@
+# *******************************************************************************>
+# Copyright (c) 2024 Contributors to the Eclipse Foundation
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+# SPDX-License-Identifier: Apache-2.0 #
+# *******************************************************************************
+
+
+# 
+load("//platform/aas/tools/sctf/bazel_gen:sctf_gen.bzl", "py_sctf_test")
+
+py_sctf_test(
+    name = "shared_memory_storage_test",
+    srcs = [
+        "__init__.py",
+        "shared_memory_storage_test.py",
+    ],
+    data = ["//platform/aas/mw/com/test/shared_memory_storage:shared_memory_storage-pkg.tar"],
+    main = "shared_memory_storage_test.py",
+    module_root = "platform/aas/mw/com/test/shared_memory_storage/sct",
+)
