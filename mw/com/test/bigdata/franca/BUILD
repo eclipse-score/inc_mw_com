@@ -1,15 +1,16 @@
-# *******************************************************************************>
-# Copyright (c) 2024 Contributors to the Eclipse Foundation
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
 # See the NOTICE file(s) distributed with this work for additional
 # information regarding copyright ownership.
+#
 # This program and the accompanying materials are made available under the
 # terms of the Apache License Version 2.0 which is available at
 # https://www.apache.org/licenses/LICENSE-2.0
-# SPDX-License-Identifier: Apache-2.0 #
+#
+# SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
 
-
-# 
 load("//ecu/xpad/ara/bmw/tools:ara_arxml_inject_non_reporting_behavior.bzl", "ara_arxml_inject_non_reporting_behavior")
 load("//ecu/xpad/ara/vector/tools/amsr_generators:amsrgen_tree.bzl", "ara_vector_artifacts", "filegroup_ara_vector_configs")
 load("//platform/aas/bazel/app_config:app_config.bzl", "resolved_app_config")
