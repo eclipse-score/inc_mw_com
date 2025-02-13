@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?><diagram program="umlet" version="13.3">
+  <zoom_level>10</zoom_level>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>540</x>
+      <y>320</y>
+      <w>100</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>ara::com
+frontend</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>650</x>
+      <y>320</y>
+      <w>100</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>lola
+frontend</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>540</x>
+      <y>370</y>
+      <w>100</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>ara::com
+binding</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>650</x>
+      <y>370</y>
+      <w>100</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>lola
+binding</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>540</x>
+      <y>280</y>
+      <w>210</w>
+      <h>30</h>
+    </coordinates>
+    <panel_attributes>application code</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>540</x>
+      <y>430</y>
+      <w>210</w>
+      <h>30</h>
+    </coordinates>
+    <panel_attributes>operating system</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLPackage</id>
+    <coordinates>
+      <x>530</x>
+      <y>250</y>
+      <w>230</w>
+      <h>170</h>
+    </coordinates>
+    <panel_attributes>Some application</panel_attributes>
+    <additional_attributes/>
+  </element>
+</diagram>
