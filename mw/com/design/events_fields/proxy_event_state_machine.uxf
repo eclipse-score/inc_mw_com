@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<diagram program="umlet" version="13.3">
+  <zoom_level>7</zoom_level>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>1001</x>
+      <y>147</y>
+      <w>623</w>
+      <h>462</h>
+    </coordinates>
+    <panel_attributes>SUBSCRIPTION PENDING
+--
+--
+valign=top
+
+layer=-4</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>231</x>
+      <y>147</y>
+      <w>616</w>
+      <h>357</h>
+    </coordinates>
+    <panel_attributes>NOT SUBSCRIBED
+--
+--
+valign=top
+
+
+fg=black
+layer=-1</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>707</x>
+      <y>854</y>
+      <w>175</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>SUBSCRIBED</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLSpecialState</id>
+    <coordinates>
+      <x>175</x>
+      <y>175</y>
+      <w>14</w>
+      <h>14</h>
+    </coordinates>
+    <panel_attributes>type=initial</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>182</x>
+      <y>175</y>
+      <w>182</w>
+      <h>84</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;</panel_attributes>
+    <additional_attributes>10.0;10.0;240.0;100.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>658</x>
+      <y>917</y>
+      <w>322</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/[GetMaxSamples() == max_samples]
+fg=blue</panel_attributes>
+    <additional_attributes>280.0;10.0;280.0;60.0;170.0;60.0;170.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLNote</id>
+    <coordinates>
+      <x>1211</x>
+      <y>763</y>
+      <w>504</w>
+      <h>399</h>
+    </coordinates>
+    <panel_attributes>Global data
+--
+SubscriptionData
++ Clear()
+- optional&lt;uint8_t&gt; NextMaxSamples: stores the max_samples when we have to defer a call to SubscriptionDispatchManager::Subscribe().
+- std::function&lt;void(SlotCollector&amp;&amp;)&gt; set_slot_collector
+- std::function&lt;void()&gt; remove_slot_collector
+
+EventReceiveHandlerManager: Manages registering / unregistering Event Receive Handlers.
+SubscriptionDispatchManager: Manages dispatching Subscribe / Unsubscribe calls. Also keeps track of the max_samples for the current subscription.
+- Subscribe(MaxSamples: UInt8):
+    - Save return value of SubscribeDispatch() as SubscriptionNo
+    - Register SubscriptionStateChangeHandler
+    - Notify local/remote skeleton about Subscribe.
+
+- Unsubscribe():
+    - Remove SubscriptionStateChangeHandler
+    - Notify local/remote skeleton about Unsubscribe
+
+- GetMaxSamples(): returns max_samples of current subscription
+
+amp::optional&lt;EventReceiveHandler&gt; EventReceiverHandler: Handler which will be registered on subscription. Will be called every time a new event is received.
+
+IsProxyMarkedForDestruction: Flag which is set when the proxy event has entered its destruction sequence. We check this in areas where the state machine uses methods called on a proxy object to ensure that the proxy still exists. 
+
+--
+Global Functions
+--  
+ClearSubscriptionData():
+- Sets all values in SubscriptionData to initial state.
+
+bg=white
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>217</x>
+      <y>266</y>
+      <w>238</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChange(kSubscribeFailure)/
+fg=#03a110</panel_attributes>
+    <additional_attributes>70.0;80.0;70.0;40.0;260.0;40.0;260.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>252</x>
+      <y>322</y>
+      <w>161</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>AWAIT_SUBSCRIBE_RESULT</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>630</x>
+      <y>322</y>
+      <w>203</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>AWAIT_UNSUBSCRIBE_ACK
+--
++ On Entry / ClearSubscriptionData()
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>350</x>
+      <y>224</y>
+      <w>189</w>
+      <h>49</h>
+    </coordinates>
+    <panel_attributes>AWAIT_NONE
+--
++ On Entry / ClearSubscriptionData()
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>1022</x>
+      <y>231</y>
+      <w>161</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>AWAIT_SUBSCRIBE_RESULT</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>1393</x>
+      <y>315</y>
+      <w>196</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>AWAIT_UNSUBSCRIBE_ACK
+--
++ On Exit / NextMaxSamples = {}</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>532</x>
+      <y>245</y>
+      <w>504</w>
+      <h>28</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/MaxSamples=max_samples, SubscribeDispatch(max_samples)
+bg=orange
+fg=blue</panel_attributes>
+    <additional_attributes>10.0;20.0;700.0;20.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>875</x>
+      <y>280</y>
+      <w>616</w>
+      <h>623</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChangeHandler(kSubscribeSuccess)/
+RegisterReceiveHandler()[IsProxyMarkedForDestrution == False]
+fg=#03a110</panel_attributes>
+    <additional_attributes>410.0;10.0;410.0;870.0;10.0;870.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>315</x>
+      <y>280</y>
+      <w>749</w>
+      <h>154</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Unsubscribe()/
+
+fg=red</panel_attributes>
+    <additional_attributes>1050.0;10.0;1050.0;190.0;10.0;190.0;10.0;140.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>406</x>
+      <y>322</y>
+      <w>238</w>
+      <h>35</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChange(kSubscribeSuccess)
+/UnsubscribeDispatch()
+fg=#03a110</panel_attributes>
+    <additional_attributes>10.0;20.0;320.0;20.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>294</x>
+      <y>280</y>
+      <w>854</w>
+      <h>168</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/[max_samples == GetMaxSamples()]
+fg=blue</panel_attributes>
+    <additional_attributes>10.0;140.0;10.0;220.0;1200.0;220.0;1200.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>532</x>
+      <y>224</y>
+      <w>504</w>
+      <h>28</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChange(kSubscribeFailure)/
+bg=green
+fg=#03a110</panel_attributes>
+    <additional_attributes>700.0;20.0;10.0;20.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>777</x>
+      <y>364</y>
+      <w>679</w>
+      <h>119</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/NextMaxSamples=max_samples
+fg=blue</panel_attributes>
+    <additional_attributes>10.0;20.0;10.0;150.0;950.0;150.0;950.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1176</x>
+      <y>245</y>
+      <w>511</w>
+      <h>84</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChangeHandler(kUnsubscribed)
+/SubscribeDispatch(NextMaxSamples)
+fg=#03a110</panel_attributes>
+    <additional_attributes>370.0;100.0;370.0;10.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>826</x>
+      <y>336</y>
+      <w>581</w>
+      <h>28</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Unsubscribe()
+fg=red</panel_attributes>
+    <additional_attributes>810.0;20.0;10.0;20.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>455</x>
+      <y>266</y>
+      <w>280</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChange(kUnsubscribed)/
+fg=#03a110</panel_attributes>
+    <additional_attributes>380.0;80.0;380.0;50.0;10.0;50.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>756</x>
+      <y>371</y>
+      <w>371</w>
+      <h>497</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Unsubscribe()/UnregisterEventReceiveHandler(),UnsubscribeDispatch()
+fg=red</panel_attributes>
+    <additional_attributes>10.0;690.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>168</x>
+      <y>343</y>
+      <w>84</w>
+      <h>84</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Unsubscribe()
+fg=red</panel_attributes>
+    <additional_attributes>90.0;100.0;10.0;100.0;10.0;10.0;90.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>280</x>
+      <y>371</y>
+      <w>931</w>
+      <h>175</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/NextMaxSamples=max_samples[max_samples != GetMaxSamples()]
+fg=blue</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;230.0;1310.0;230.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLState</id>
+    <coordinates>
+      <x>1197</x>
+      <y>504</y>
+      <w>294</w>
+      <h>63</h>
+    </coordinates>
+    <panel_attributes>AWAIT_SUBSCRIBE_RESULT_UPDATED_MAXSAMPLES</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1470</x>
+      <y>364</y>
+      <w>287</w>
+      <h>154</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChangeHandler(kSubscribeSuccess)/
+UnsubscribeDispatch()
+fg=#03a110</panel_attributes>
+    <additional_attributes>10.0;200.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>259</x>
+      <y>371</y>
+      <w>952</w>
+      <h>196</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Unsubscribe()
+fg=red</panel_attributes>
+    <additional_attributes>1340.0;260.0;10.0;260.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>154</x>
+      <y>252</y>
+      <w>567</w>
+      <h>658</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChangeHandler(kQmDisconnect)/[isAsilQMProxy()]
+fg=#03a110</panel_attributes>
+    <additional_attributes>790.0;920.0;10.0;920.0;10.0;10.0;280.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1176</x>
+      <y>259</y>
+      <w>350</w>
+      <h>259</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChangeHandler(kSubscribeFailure)/
+SubscribeDispatch(NextMaxSamples)
+fg=#03a110</panel_attributes>
+    <additional_attributes>110.0;350.0;110.0;10.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>476</x>
+      <y>266</y>
+      <w>343</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChangeHandler(kQmDisconnect)/[isAsilQMProxy()]
+fg=#03a110</panel_attributes>
+    <additional_attributes>430.0;80.0;430.0;20.0;50.0;20.0;50.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>609</x>
+      <y>903</y>
+      <w>371</w>
+      <h>133</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/PrintError()[GetMaxSamples() != max_samples]
+fg=blue</panel_attributes>
+    <additional_attributes>390.0;10.0;510.0;10.0;510.0;170.0;10.0;170.0;10.0;10.0;140.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>826</x>
+      <y>280</y>
+      <w>357</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+SubscriptionStateChangeHandler(kSubscribeSuccess)/
+UnsubscribeDispatch()[IsProxyMarkedForDestrution == True]
+fg=#03a110</panel_attributes>
+    <additional_attributes>300.0;10.0;60.0;10.0;60.0;80.0;10.0;80.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>938</x>
+      <y>126</y>
+      <w>329</w>
+      <h>119</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/[GetMaxSamples() == max_samples]
+fg=blue</panel_attributes>
+    <additional_attributes>280.0;150.0;280.0;20.0;180.0;20.0;180.0;150.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>910</x>
+      <y>105</y>
+      <w>378</w>
+      <h>140</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/PrintError()[GetMaxSamples() != max_samples]
+fg=blue</panel_attributes>
+    <additional_attributes>340.0;180.0;340.0;20.0;190.0;20.0;190.0;180.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1309</x>
+      <y>84</y>
+      <w>371</w>
+      <h>77</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/PrintError()[NextMaxSamples != max_samples]
+fg=blue</panel_attributes>
+    <additional_attributes>370.0;90.0;370.0;20.0;150.0;20.0;150.0;90.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1351</x>
+      <y>112</y>
+      <w>322</w>
+      <h>49</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+Subscribe(max_samples)/[NextMaxSamples == max_samples]
+fg=blue</panel_attributes>
+    <additional_attributes>290.0;50.0;290.0;20.0;160.0;20.0;160.0;50.0</additional_attributes>
+  </element>
+</diagram>

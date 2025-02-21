@@ -1,0 +1,866 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<diagram program="umlet" version="13.3">
+  <zoom_level>7</zoom_level>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>1365</x>
+      <y>350</y>
+      <w>287</w>
+      <h>84</h>
+    </coordinates>
+    <panel_attributes>/mw::com::message_passing::ISender/
+--
+/+Send(ShortMessage) = 0: amp::expected&lt;Error&gt;/
+/+Send(MediumMessage) = 0: amp::expected&lt;Error&gt;/
+/+HasNonBlockingGuarantee() = 0: bool/
+--
+Notes: Opens an OS specific underlying communication
+channel and transmits the specified message.
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>1365</x>
+      <y>539</y>
+      <w>448</w>
+      <h>98</h>
+    </coordinates>
+    <panel_attributes>/mw::com::message_passing::IReceiver/
+--
+/+Register(MessageId, amp::callback&lt;void(ShortMessagePayload), pid_t&gt;) = 0: bool/
+/+Register(MessageId, amp::callback&lt;void(MediumMessagePayload, pid_t)&gt;) = 0: bool/
+/+StartListening() = 0: amp::expected&lt;Error&gt;/
+--
+Notes: Creates/Opens an OS specific underlying communication channel
+and receives specified messages.
+If a handler has been registered for a specific message, it is invoked.
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>1316</x>
+      <y>28</y>
+      <w>301</w>
+      <h>133</h>
+    </coordinates>
+    <panel_attributes>lola::ElementFqId
+--
++serviceId : uint16_t
++instanceId: uint16_t
++elementId: uint8_t
+--
++ElementFqId(service_id : const std::uint16_t,event_id : const std::uint8_t,instance_id : const std::uint16_t)
++ToString() : std::string
+--
+Notes:
+Full qualified event ID within a LoLa process.
+At least WITHIN one LoLa enabled process the
+namespace provided by those types should be enough.</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>616</x>
+      <y>455</y>
+      <w>623</w>
+      <h>203</h>
+    </coordinates>
+    <panel_attributes>lola::messaging::MessagePassingFacade
+--
+-msg_receiver_asil_b_: MessageReceiveCtrl
+-msg_receiver_qm_: MessageReceiveCtrl
+-subscribe_event_handler_ : SubscribeEventHandler
+-notify_event_handler_ : NotifyEventHandler
+-message_passing_ctrl_ : IMessagePassingControl&amp;
+--
++MessagePassingFacade(IMessagePassingControl&amp; msgpass_ctrl,
+    const AsilSpecificCfg config_asil_qm,
+    const amp::optional&lt;AsilSpecificCfg&gt; config_asil_b)
++SubscribeEvent(QualityType, ElementFqId, std::uint8_t max_samples, SubscriptionStateCallback, uint16_t target_node_id)
++UnsubscribeEvent(QualityType, ElementFqId, std::uint8_t max_samples, uint16_t target_node_id)
++AddSubscriptionEventHandler(QualityType, ElementFqId, SubscriptionEventHandler) : void
++RemoveSubscriptionEventHandler(QualityType asil_level,ElementFqId) : void
++RegisterEventNotification(ASILType, ElementFqId, amp::callback&lt;void(void), pid_t): RegistrationHandle
++UnregisterEventNotification(ASILType, RegistrationHandle) : void
++NotifyEvent(ASILType, ElementFqId): void
++DisconnectUnsafeClients(event_id : const ElementFqId) : void
+
+
+
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLGeneric</id>
+    <coordinates>
+      <x>1652</x>
+      <y>28</y>
+      <w>168</w>
+      <h>133</h>
+    </coordinates>
+    <panel_attributes>&lt;&lt;enumeration&gt;&gt;
+_:lola::MessageIds_
+--
+SUBSCRIBE_EVENT
+SUBSCRIBE_EVENT_RESULT
+UNSUBSCRIBE_EVENT
+UNSUBSCRIBE_EVENT_ACK
+REGISTER_EVENT_NOTIFIER
+UNREGISTER_EVENT_NOTIFIER
+NOTIFY_EVENT
+DISCONNECT_EVENT</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2002</x>
+      <y>126</y>
+      <w>560</w>
+      <h>133</h>
+    </coordinates>
+    <panel_attributes>lola::SubscribeEventMessage
+--
++element_fq_id_ : ElementFqId
++max_samples_: std::uint8_t
++call_seq_count_: CallSeqCounterType
++sender_node_id_: pid_t
+--
++DeserializeToSubscribeEventMessage(const MediumMessage&amp;, pid_t sender_node_id): SubscribeEventMessage
++SubscribeEventMsg(ElementFqId, uint8_t max_samples_, CallSeqCounterType, pid_t sender_node_id)
++SerializeToMediumMessage() : MediumMessage
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2002</x>
+      <y>0</y>
+      <w>154</w>
+      <h>49</h>
+    </coordinates>
+    <panel_attributes>&lt;&lt;typedef&gt;&gt;
+lola::CallSeqCounterType
+--
+using std::uint16_t</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>1848</x>
+      <y>91</y>
+      <w>238</w>
+      <h>21</h>
+    </coordinates>
+    <panel_attributes>mw::com::message_passing::MediumMessage</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1953</x>
+      <y>105</y>
+      <w>63</w>
+      <h>119</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+uses</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;150.0;70.0;150.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2002</x>
+      <y>497</y>
+      <w>616</w>
+      <h>98</h>
+    </coordinates>
+    <panel_attributes>lola::messaging::SubscribeEventResultMessage
+--
++subscribeSuccess: bool
++call_seq_count_: CallSeqCounterType
++sender_node_id_: pid_t
+--
++SerializeToShortMessage() : ShortMessage const
++DeserializeToSubscribeEventResultMessage(ShortMessage, pid_t sender_node_id): SubscribeEventResultMessage
++SubscribeEventResultMsg(bool subscribeSuccess, CallSeqCounterType, pid_t sender_node_id)
+
+
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1960</x>
+      <y>462</y>
+      <w>56</w>
+      <h>84</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+uses</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;100.0;60.0;100.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>1862</x>
+      <y>448</y>
+      <w>231</w>
+      <h>21</h>
+    </coordinates>
+    <panel_attributes>mw::com::message_passing::ShortMessage</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2002</x>
+      <y>280</y>
+      <w>560</w>
+      <h>126</h>
+    </coordinates>
+    <panel_attributes>lola::messaging::UnsubscribeEventMessage
+--
++element_fq_id_ : ElementFqId
++max_samples_: std::uint8_t
++call_seq_count_: CallSeqCounterType
++sender_node_id_: pid_t
+--
++DeserializeToUnsubscribeEventMessage(const MediumMessage&amp;, pid_t sender_node_id): UnsubscribeEventMessage
++UnsubscribeEventMsg(ElementFqId, uint8_t max_samples_, CallSeqCounterType, pid_t sender_node_id)
++SerializeToMediumMessage() : MediumMessage</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1939</x>
+      <y>105</y>
+      <w>77</w>
+      <h>266</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+uses</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;360.0;90.0;360.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2443</x>
+      <y>833</y>
+      <w>168</w>
+      <h>42</h>
+    </coordinates>
+    <panel_attributes>RegisterEventNotifierMsg
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLGeneric</id>
+    <coordinates>
+      <x>0</x>
+      <y>343</y>
+      <w>497</w>
+      <h>105</h>
+    </coordinates>
+    <panel_attributes>_:bmw::com::impl::lola::Runtime_
+--
+--
++Runtime(config : const Configuration&amp;)
++GetBindingType() : BindingType
++GetLolaMessaging() : lola::IMessagePassingService&amp;
++HasAsilBSupport() : bool 
++GetMessagePassingCfg(asil_level : const QualityType) : MessagePassingFacade::AsilSpecificCfg</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>490</x>
+      <y>399</y>
+      <w>140</w>
+      <h>112</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+m2=1</panel_attributes>
+    <additional_attributes>10.0;10.0;130.0;10.0;130.0;130.0;180.0;130.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>595</x>
+      <y>686</y>
+      <w>679</w>
+      <h>119</h>
+    </coordinates>
+    <panel_attributes>lola::messaging::SubscribeEventHandler
+--
++SubscribeEventHandler(IMessagePassingControl&amp;, bool asil_b_capability)
++UnsubscribeEvent(QualityType, ElementFqId, std::uint8_t max_samples_, pid_t targetNodeId, 
+        IMessagePassingService::EventSubscriptionNoType subscriptionNo)
++RegisterMessageReceivedCallbacks(QualityType, message_passing::IReceiver&amp;): void
++SubscribeEvent(QualityType, ElementFqId, std::uint8_t max_samples, IMessagePassingService::SubscriptionStateCallback, pid_t) : void
++AddSubscriptionEventHandler(QualityType, ElementFqId, IMessagePassingService::SubscriptionEventHandler) : void
++RemoveSubscriptionEventHandler(QualityType, ElementFqId) : void
++DisconnectUnsafeClients(ElementFqId) : void
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>588</x>
+      <y>833</y>
+      <w>609</w>
+      <h>98</h>
+    </coordinates>
+    <panel_attributes>lola::messaging::NotifyEventHandler
+--
++NotifyEventHandler(IMessagePassingControl&amp;, bool asilBCapability, const amp::stop_token&amp;)
+
++RegisterMessageReceivedCallbacks(QualityType, message_passing::IReceiver&amp;) : void
++NotifyEvent(QualityType, ElementFqId) : void
++RegisterEventNotification(QualityType, ElementFqId, IMessagePassingService::EventUpdateNotificationHandler, pid_t) 
+        : IMessagePassingService::HandlerRegistrationNoType
++UnregisterEventNotification(QualityType, ElementFqId, IMessagePassingService::HandlerRegistrationNoType, pid_t) : void</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>581</x>
+      <y>49</y>
+      <w>581</w>
+      <h>154</h>
+    </coordinates>
+    <panel_attributes>/messaging::IMessagePassingService/
+--
+using HandlerRegistrationNoType std::uint32_t
+using EventSubscriptionNoType std::uint32_t
+--
++SubscribeEvent(QualityType, ElementFqId, std::uint8_t max_samples, 
+        SubscriptionStateCallback, pid_t target_node_id) = 0: EventSubscriptionNoType
++UnsubscribeEvent(QualityType, ElementFqId, std::uint8_t max_samples, pid_t target_node_id) = 0: void
++AddSubscriptionEventHandler(QualityType, ElementFqId, SubscriptionEventHandler) = 0: void
++RemoveSubscriptionEventHandler(QualityType asil_level,ElementFqId) = 0: void
++RegisterEventNotification(ASILType, ElementFqId, amp::callback&lt;void(void), pid_t) = 0: HandlerRegistrationNoType
++UnregisterEventNotification(ASILType, RegistrationHandle) = 0: void
++NotifyEvent(ASILType, ElementFqId) = 0: void
++DisconnectUnsafeClients(ElementFqId event_id) = 0: : void
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>672</x>
+      <y>196</y>
+      <w>21</w>
+      <h>273</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;370.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>700</x>
+      <y>217</y>
+      <w>511</w>
+      <h>63</h>
+    </coordinates>
+    <panel_attributes>/lola::messaging::IMessagePassingControl/
+--
++GetMessagePassingSender(QualityType, pid_t targetNodeId) = 0: message_passing::ISender*
++CreateMessagePassingName(QualityType, pid_t) = 0: std::string
++GetNodeIdentifier() = 0: pid_t</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>973</x>
+      <y>273</y>
+      <w>21</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;60.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>630</x>
+      <y>651</y>
+      <w>21</w>
+      <h>49</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;&lt;&lt;-
+bg=black</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;50.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>567</x>
+      <y>581</y>
+      <w>63</w>
+      <h>287</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;&lt;&lt;-
+bg=black</panel_attributes>
+    <additional_attributes>70.0;10.0;10.0;10.0;10.0;390.0;30.0;390.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>735</x>
+      <y>315</y>
+      <w>469</w>
+      <h>91</h>
+    </coordinates>
+    <panel_attributes>lola::messaging::MessagePassingControl
+--
+-senders_qm_ : std::unordered_map&lt;pid_t, std::unique_ptr&lt;ISender&gt;&gt;
+-senders_asil_ : std::unordered_map&lt;pid_t, std::unique_ptr&lt;ISender&gt;&gt;
+--
++MessagePassingCtrl(asil_b_capability : const bool,sender_queue_size : const std::int32_t)
++GetMessagePassingSender(QualityType, pid_t targetNodeId) : message_passing::ISender
++GetNodeIdentifier(): pid_t
++CreateMessagePassingName(QualityType, pid_t targetNodeId): std::string
+
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1071</x>
+      <y>399</y>
+      <w>21</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;&lt;&lt;-
+bg=black</panel_attributes>
+    <additional_attributes>10.0;80.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>525</x>
+      <y>245</y>
+      <w>189</w>
+      <h>490</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+uses</panel_attributes>
+    <additional_attributes>250.0;10.0;10.0;10.0;10.0;680.0;100.0;680.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>490</x>
+      <y>364</y>
+      <w>259</w>
+      <h>28</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+m2=1</panel_attributes>
+    <additional_attributes>10.0;10.0;350.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>1365</x>
+      <y>245</y>
+      <w>469</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>mw::com::message_passing::SenderFactory
+--
+_Create(std::string identifier, amp::stop_token const&amp;, std::int32_t maxNumbersOfRetry = 5)_
+_       : std::unique_ptr&lt;ISender&gt;_
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1484</x>
+      <y>294</y>
+      <w>56</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+creates</panel_attributes>
+    <additional_attributes>10.0;80.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1197</x>
+      <y>273</y>
+      <w>182</w>
+      <h>84</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+uses</panel_attributes>
+    <additional_attributes>240.0;10.0;190.0;10.0;190.0;100.0;10.0;100.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>1365</x>
+      <y>455</y>
+      <w>469</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>mw::com::message_passing::ReceiverFactory
+--
+_+Create(std::string identifier, concurrency::Executor&amp;, std::vector&lt;uid_t&gt; allowedUserIds,_
+_        std::int32_t maxNumberMessageInQueue = 10) : std::unique_ptr&lt;IReceiver&gt;_
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1491</x>
+      <y>504</y>
+      <w>56</w>
+      <h>49</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+creates</panel_attributes>
+    <additional_attributes>10.0;50.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1232</x>
+      <y>483</y>
+      <w>147</w>
+      <h>28</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+uses</panel_attributes>
+    <additional_attributes>190.0;20.0;10.0;20.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>847</x>
+      <y>973</y>
+      <w>504</w>
+      <h>91</h>
+    </coordinates>
+    <panel_attributes>/lola::messaging::HandlerBase/
+--
+#mp_control_: IMessagePassingControl&amp;
+#asil_b_capability_: bool
+--
++HandlerBase(mp_control : IMessagePassingControl&amp;,asil_b_capability : const bool)
+/+RegisterMessageReceivedCallbacks(QualityType, message_passing::IReceiver&amp; receiver) = 0: void/
+
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1267</x>
+      <y>721</y>
+      <w>42</w>
+      <h>266</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>40.0;360.0;40.0;10.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1190</x>
+      <y>889</y>
+      <w>49</w>
+      <h>98</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>50.0;120.0;50.0;10.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>441</x>
+      <y>105</y>
+      <w>105</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lola::ASILType
+&lt;&lt;enum&gt;&gt;
+--
+INVALID
+ASIL_QM
+ASIL_B</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>539</x>
+      <y>147</y>
+      <w>56</w>
+      <h>21</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.</panel_attributes>
+    <additional_attributes>10.0;10.0;60.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>490</x>
+      <y>504</y>
+      <w>133</w>
+      <h>21</h>
+    </coordinates>
+    <panel_attributes>lt=(+)-</panel_attributes>
+    <additional_attributes>170.0;10.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1232</x>
+      <y>595</y>
+      <w>147</w>
+      <h>28</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;&lt;&lt;-
+bg=black
+m2=1..2</panel_attributes>
+    <additional_attributes>10.0;10.0;190.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>0</x>
+      <y>483</y>
+      <w>497</w>
+      <h>49</h>
+    </coordinates>
+    <panel_attributes>MessageReceiveCtrl
+--
++receiver: std::unique_ptr&lt;IReceiver&gt;
++threadPool: std::unique_ptr&lt;concurrency::ThreadPool&gt;
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2443</x>
+      <y>945</y>
+      <w>168</w>
+      <h>35</h>
+    </coordinates>
+    <panel_attributes>NotifyEventMsg
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2002</x>
+      <y>700</y>
+      <w>644</w>
+      <h>105</h>
+    </coordinates>
+    <panel_attributes>template=id
+lola::messaging::ElementFqIdMessage
+--
++element_fq_id_ : ElementFqId
++sender_node_id_: pid_t
+--
++DeserializeToElementFqIdMessage(message_payload : ShortMessagePayload,sender_node_id : pid_t): ElementFqIdMessage
++ElementFqIdMessage(ElementFqId, pid_t sender_node_id)
++SerializeToShortMessage() : ShortMessage
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2002</x>
+      <y>602</y>
+      <w>616</w>
+      <h>91</h>
+    </coordinates>
+    <panel_attributes>lola::messaging::UnsubscribeEventAckMessage
+--
++call_seq_count_: CallSeqCounterType
++sender_node_id_: pid_t
+--
++DeserializeToUnsubscribeEventAckMessage(ShortMessage, pid_t sender_node_id): UnsubscribeEventAckMessage
++UnsubscribeEventAckMessage(CallSeqCounterType, pid_t sender_node_id)
++SerializeToShortMessage() : ShortMessage const
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>2107</x>
+      <y>798</y>
+      <w>350</w>
+      <h>182</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;.
+&lt;&lt;bind&gt;&gt;
+&lt;id -&gt; kNotifyEvent&gt;</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;240.0;480.0;240.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>2107</x>
+      <y>798</y>
+      <w>350</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;.
+&lt;&lt;bind&gt;&gt;
+&lt;id -&gt; kRegisterEventNotifier&gt;</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;80.0;480.0;80.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2443</x>
+      <y>889</y>
+      <w>168</w>
+      <h>42</h>
+    </coordinates>
+    <panel_attributes>UnregisterEventNotifierMsg
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>2107</x>
+      <y>798</y>
+      <w>350</w>
+      <h>126</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;.
+&lt;&lt;bind&gt;&gt;
+&lt;id -&gt; kUnregisterEventNotifier&gt;</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;160.0;480.0;160.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>2443</x>
+      <y>994</y>
+      <w>168</w>
+      <h>35</h>
+    </coordinates>
+    <panel_attributes>DisconnectEventMessage
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1946</x>
+      <y>462</y>
+      <w>70</w>
+      <h>203</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+uses</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;270.0;80.0;270.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>2107</x>
+      <y>798</y>
+      <w>350</w>
+      <h>231</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;.
+&lt;&lt;bind&gt;&gt;
+&lt;id -&gt; kDisconnectEvent&gt;</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;310.0;480.0;310.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>0</x>
+      <y>238</y>
+      <w>497</w>
+      <h>49</h>
+    </coordinates>
+    <panel_attributes>mw::com::impl::lola::IRuntime
+--
++GetLolaMessaging() : lola::IMessagePassingService&amp;
++HasAsilBSupport() : bool 
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>238</x>
+      <y>280</y>
+      <w>21</w>
+      <h>77</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;90.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>84</x>
+      <y>154</y>
+      <w>343</w>
+      <h>42</h>
+    </coordinates>
+    <panel_attributes>mw::com::impl::IRuntimeBinding
+--
++ GetBindingType() : BindingType
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>238</x>
+      <y>189</y>
+      <w>21</w>
+      <h>63</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;70.0</additional_attributes>
+  </element>
+</diagram>
