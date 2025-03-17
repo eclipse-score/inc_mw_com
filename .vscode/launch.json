@@ -1,0 +1,139 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'qor_core'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=qor-core"
+                ],
+                "filter": {
+                    "name": "qor_core",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'qor_os'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=qor-os"
+                ],
+                "filter": {
+                    "name": "qor_os",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'qor_com'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "qor_com",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'listener'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=listener",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "listener",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'listener'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=listener",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "listener",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'notifier'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=notifier",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "notifier",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'notifier'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=notifier",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "notifier",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

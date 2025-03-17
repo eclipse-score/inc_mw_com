@@ -1,0 +1,9 @@
+@startuml
+component API
+component Routing
+component Transport
+
+API -- Routing : uses
+Routing -- Transport : uses
+
+@enduml

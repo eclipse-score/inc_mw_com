@@ -1,0 +1,11 @@
+[package]
+name = "qor-com"
+version = "0.1.0"
+edition = "2021"
+build="build.rs"
+
+[dependencies]
+qor-core = { path = "../qor-core" }
+qor-os = { path = "../qor-os" }
+tracing = "0.1"
+tracing-subscriber = "0.3"
