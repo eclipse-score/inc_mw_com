@@ -87,6 +87,7 @@ where
             .map_err(|_| Error::from_code(qor_core::core_errors::LOCK_ERROR))?;
         loop {
             if *event {
+                *event = false;
                 return Ok(true);
             } else {
                 event = self
@@ -107,6 +108,7 @@ where
 
         loop {
             if *event {
+                *event = false;
                 return Ok(true);
             } else {
                 let (q, r) = self

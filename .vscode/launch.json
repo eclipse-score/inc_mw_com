@@ -7,6 +7,42 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug example 'event'",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--example=event",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "event",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'topic'",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--example=topic",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "topic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in library 'qor_core'",
             "cargo": {
                 "args": [
