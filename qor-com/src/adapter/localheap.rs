@@ -11,30 +11,28 @@ use qor_core::prelude::*;
 
 use std::fmt::Debug;
 
-mod buffer;
+mod sample;
+
+mod signal;
+pub use signal::*;
 
 mod event;
 pub use event::*;
 
-mod topic;
-pub use topic::*;
-
-mod rpc;
-pub use rpc::*;
+mod method;
+pub use method::*;
 
 //
 // The TransportAdapter implementation
 //
 
 #[derive(Debug)]
-pub struct HeapStaticConfig<'t> {
-    _phantom: std::marker::PhantomData<&'t ()>,
-}
+pub struct HeapStaticConfig {}
 
-impl<'t> StaticConfig<HeapAdapter<'t>> for HeapStaticConfig<'t> {
+impl StaticConfig<HeapAdapter> for HeapStaticConfig {
     #[inline(always)]
     fn name() -> &'static str {
-        "HeapHeap"
+        "HeapAdapter"
     }
 
     #[inline(always)]
@@ -49,57 +47,57 @@ impl<'t> StaticConfig<HeapAdapter<'t>> for HeapStaticConfig<'t> {
 }
 
 #[derive(Debug)]
-pub struct HeapAdapter<'t> {
-    _phantom: std::marker::PhantomData<&'t ()>,
-}
+pub struct HeapAdapter {}
 
-impl<'t> HeapAdapter<'t> {
-    const CONFIG: HeapStaticConfig<'t> = HeapStaticConfig {
-        _phantom: std::marker::PhantomData,
-    };
+impl HeapAdapter {
+    const CONFIG: HeapStaticConfig = HeapStaticConfig {};
 
     #[inline(always)]
     pub fn new() -> Self {
-        Self {
-            _phantom: std::marker::PhantomData,
-        }
+        Self {}
     }
 }
 
-impl<'t> Adapter for HeapAdapter<'t> {
-    type StaticConfig = HeapStaticConfig<'t>;
+impl Adapter for HeapAdapter {
+    type StaticConfig = HeapStaticConfig;
 
-    fn static_config(&self) -> &'static Self::StaticConfig {
+    fn static_config<'a>(&self) -> &'a Self::StaticConfig {
         &Self::CONFIG
     }
 }
 
-impl<'t> TransportAdapter<'t> for HeapAdapter<'t> {
+impl TransportAdapter for HeapAdapter {
+    type SignalBuilder = HeapSignalBuilder;
+    type EventBuilder<T>
+        = HeapEventBuilder<T>
+    where
+        T: Debug + Send + TypeTag + Coherent + Reloc;
+    type MethodBuilder<Args, R>
+        = HeapMethodBuilder<Args, R>
+    where
+        Args: ParameterPack,
+        R: ReturnValue;
+
     /// Create a new event on the local heap
-    fn event<'a>(&'t self, _label: Label) -> impl EventBuilder<'t, Self> where 't: 'a {
-        HeapEventBuilder::new()
+    fn signal(&self, _label: Label) -> Self::SignalBuilder {
+        HeapSignalBuilder::new()
     }
 
     /// Create a new topic on the local heap
-    fn topic<'a, T>(&'t self, _label: Label) -> impl TopicBuilder<'t, Self, T>
+    fn event<T>(&self, _label: Label) -> Self::EventBuilder<T>
     where
-        T: TypeTag + Coherent + Reloc + Send + Debug + 'a,
-        't: 'a,
+        T: TypeTag + Coherent + Reloc + Send + Debug,
     {
-        HeapTopicBuilder::new()
+        HeapEventBuilder::new()
     }
 
     /// Create a new remote_procedure_call on the local heap
-    fn remote_procedure<'a, Args, R>(
-        &self,
-        label: Label,
-    ) -> impl RemoteProcedureBuilder<'t, Self, Args, R>
+    fn method<Args, R>(&self, label: Label) -> Self::MethodBuilder<Args, R>
     where
-        Args: ParameterPack + 'a,
-        R: Return + 'a,
-        't: 'a
+        Args: ParameterPack,
+        R: ReturnValue,
     {
-        HeapRemoteProcedureBuilder::new(label)
+        HeapMethodBuilder::new(label)
     }
 }
 
@@ -117,10 +115,11 @@ mod test {
 
     #[test]
     fn test_heap_event_threading() {
-        // ADAPTER as static to avoid lifetime issues in the test thread. 
-        static ADAPTER : std::sync::LazyLock<HeapAdapter> = std::sync::LazyLock::new(|| HeapAdapter::new());
+        // ADAPTER as static to avoid lifetime issues in the test thread.
+        static ADAPTER: std::sync::LazyLock<HeapAdapter> =
+            std::sync::LazyLock::new(|| HeapAdapter::new());
 
-        let event = ADAPTER.event(Label::INVALID).build().unwrap();
+        let event = ADAPTER.signal(Label::INVALID).build().unwrap();
 
         let notifier = event.notifier().unwrap();
         let handle_notifier = std::thread::spawn(move || {
@@ -199,7 +198,7 @@ mod test {
         let publisher = topic.publisher().unwrap();
 
         for i in 0..4 {
-            let sample = publisher.loan_with(Payload{ a: 42, b: i }).unwrap();
+            let sample = publisher.loan_with(Payload { a: 42, b: i }).unwrap();
             sample.publish().unwrap();
         }
     }
@@ -228,8 +227,9 @@ mod test {
 
     #[test]
     fn test_heap_topic_threading() {
-        // ADAPTER as static to avoid lifetime issues in the test thread. 
-        static ADAPTER : std::sync::LazyLock<HeapAdapter> = std::sync::LazyLock::new(|| HeapAdapter::new());
+        // ADAPTER as static to avoid lifetime issues in the test thread.
+        static ADAPTER: std::sync::LazyLock<HeapAdapter> =
+            std::sync::LazyLock::new(|| HeapAdapter::new());
 
         let topic = ADAPTER
             .topic::<Payload>(Label::INVALID)

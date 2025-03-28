@@ -7,10 +7,12 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::HeapAdapter;
 
+use super::sample::*;
 use crate::base::*;
 use qor_core::prelude::*;
 
 use std::{
+    collections::VecDeque,
     fmt::Debug,
     sync::{Arc, Condvar, Mutex},
     time::Duration,
@@ -20,151 +22,213 @@ use std::{
 // Event
 //
 
+/// The local event
 #[derive(Debug)]
-pub struct HeapEvent<'s>
+pub struct HeapEvent<T>
 where
-    Self: 's,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    _phantom: std::marker::PhantomData<&'s ()>,
-    event: Arc<(Mutex<bool>, Condvar)>,
+    queue: ValueQueue<T>,
+
+    queue_policy: QueuePolicy,
+    max_fan_in: usize,
+    max_fan_out: usize,
 }
 
-impl<'s> Clone for HeapEvent<'s> {
+impl<T> Clone for HeapEvent<T>
+where
+    T: Debug + Send + TypeTag + Coherent + Reloc,
+{
     fn clone(&self) -> Self {
         Self {
-            _phantom: std::marker::PhantomData,
-            event: self.event.clone(),
+            queue: self.queue.clone(),
+            queue_policy: self.queue_policy,
+            max_fan_in: self.max_fan_in,
+            max_fan_out: self.max_fan_out,
         }
     }
 }
 
-impl<'s, 't> Notifier<'s, 't, HeapAdapter<'t>> for HeapEvent<'s>
+impl<T> Publisher<HeapAdapter, T> for HeapEvent<T>
 where
-    't: 's,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    // Notify the event by setting the flag and waking up all listeners
-    fn notify(&self) {
-        let mut event = self.event.0.lock().unwrap();
-        *event = true;
-        self.event.1.notify_all();
+    type SampleMaybeUninit = HeapSampleMaybeUninit<T>;
+
+    fn loan_uninit(&self) -> ComResult<Self::SampleMaybeUninit> {
+        Ok(HeapSampleMaybeUninit::new(self.queue.clone()))
+    }
+
+    fn loan_with(
+        &self,
+        value: T,
+    ) -> ComResult<<Self::SampleMaybeUninit as SampleMaybeUninit<HeapAdapter, T>>::SampleMut> {
+        Ok(HeapSample::new(self.queue.clone(), value))
     }
 }
 
-impl<'s, 't> Listener<'s, 't, HeapAdapter<'t>> for HeapEvent<'s>
+impl<T> Subscriber<HeapAdapter, T> for HeapEvent<T>
 where
-    't: 's,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    // check the event flag
-    #[inline(always)]
-    fn check(&self) -> ComResult<bool> {
-        Ok(*self
-            .event
-            .0
-            .lock()
-            .map_err(|_| Error::from_code(qor_core::core_errors::LOCK_ERROR))?)
+    type Sample = HeapSample<T>;
+
+    fn try_receive(&self) -> ComResult<Option<Self::Sample>> {
+        match self.queue.0.lock().unwrap().pop_front() {
+            Some(value) => Ok(Some(HeapSample::new_boxed(self.queue.clone(), value))),
+            None => Ok(None),
+        }
     }
 
-    // check and reset the event flag
-    #[inline(always)]
-    fn check_and_reset(&self) -> ComResult<bool> {
-        let mut event = self
-            .event
-            .0
-            .lock()
-            .map_err(|_| Error::from_code(qor_core::core_errors::LOCK_ERROR))?;
-
-        // store state and reset
-        let result = *event;
-        *event = false;
-        Ok(result)
-    }
-
-    fn wait(&self) -> ComResult<bool> {
-        let mut event = self
-            .event
-            .0
-            .lock()
-            .map_err(|_| Error::from_code(qor_core::core_errors::LOCK_ERROR))?;
+    fn receive(&self) -> ComResult<Self::Sample> {
+        let mut queue = self.queue.0.lock().unwrap();
         loop {
-            if *event {
-                return Ok(true);
+            if let Some(value) = queue.pop_front() {
+                return Ok(HeapSample::new_boxed(self.queue.clone(), value));
             } else {
-                event = self
-                    .event
-                    .1
-                    .wait(event)
-                    .map_err(|_| Error::from_code(qor_core::core_errors::LOCK_ERROR))?;
+                queue = self.queue.1.wait(queue).unwrap();
             }
         }
     }
 
-    fn wait_timeout(&self, timeout: Duration) -> ComResult<bool> {
-        let mut event = self
-            .event
-            .0
-            .lock()
-            .map_err(|_| Error::from_code(qor_core::core_errors::LOCK_ERROR))?;
+    fn receive_timeout(&self, timeout: Duration) -> ComResult<Self::Sample> {
+        let mut queue = self.queue.0.lock().unwrap();
 
         loop {
-            if *event {
-                return Ok(true);
+            if let Some(value) = queue.pop_front() {
+                return Ok(HeapSample::new_boxed(self.queue.clone(), value));
             } else {
-                let (q, r) = self
-                    .event
-                    .1
-                    .wait_timeout(event, timeout)
-                    .map_err(|_| Error::from_code(qor_core::core_errors::LOCK_ERROR))?;
-                event = q;
+                let (q, r) = self.queue.1.wait_timeout(queue, timeout).unwrap();
+                queue = q;
                 if r.timed_out() {
-                    return Ok(false);
+                    return Err(ComError::Timeout);
                 }
             }
         }
     }
 
-    async fn listen(&self) -> ComResult<bool> {
-        Err(Error::FEATURE_NOT_SUPPORTED)
+    async fn receive_async(&self) -> ComResult<Self::Sample> {
+        unimplemented!()
+    }
+
+    async fn receive_timeout_async(&self, _timeout: Duration) -> ComResult<Self::Sample> {
+        unimplemented!()
     }
 }
 
-impl<'s, 't> Event<'s, 't, HeapAdapter<'t>> for HeapEvent<'s>
+impl<T> Event<HeapAdapter, T> for HeapEvent<T>
 where
-    't: 's,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    fn notifier(&self) -> ComResult<impl Notifier<'s, 't, HeapAdapter<'t>>> {
+    type Publisher = Self;
+    type Subscriber = Self;
+
+    #[inline(always)]
+    fn publisher(&self) -> ComResult<Self::Publisher> {
         Ok(self.clone())
     }
 
-    fn listener(&self) -> ComResult<impl Listener<'s, 't, HeapAdapter<'t>>> {
+    #[inline(always)]
+    fn subscriber(&self) -> ComResult<Self::Subscriber> {
         Ok(self.clone())
     }
 }
 
-impl<'s> HeapEvent<'s> {
+impl<T> HeapEvent<T>
+where
+    T: Debug + Send + TypeTag + Coherent + Reloc,
+{
     #[inline(always)]
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(
+        max_queue_depth: usize,
+        queue_policy: QueuePolicy,
+        max_fan_in: usize,
+        max_fan_out: usize,
+    ) -> Self {
+        let mut queue = VecDeque::new();
+        queue.reserve(max_queue_depth);
+
         Self {
-            _phantom: std::marker::PhantomData,
-            event: Arc::new((Mutex::new(false), Condvar::new())),
+            queue: Arc::new((Mutex::new(queue), Condvar::new())),
+            queue_policy,
+            max_fan_in,
+            max_fan_out,
         }
     }
 }
 
 #[derive(Debug)]
-pub struct HeapEventBuilder {}
+pub struct HeapEventBuilder<T>
+where
+    T: Debug + Send + TypeTag + Coherent + Reloc,
+{
+    _phantom: std::marker::PhantomData<T>,
 
-impl<'t> EventBuilder<'t, HeapAdapter<'t>> for HeapEventBuilder {
-    fn build<'a>(self) -> ComResult<impl Event<'a, 't, HeapAdapter<'t>>>
-    where
-        't: 'a,
-    {
-        Ok(HeapEvent::new())
+    max_queue_depth: usize,
+    queue_policy: QueuePolicy,
+    max_fan_in: usize,
+    max_fan_out: usize,
+}
+
+impl<T> EventBuilder<HeapAdapter, T> for HeapEventBuilder<T>
+where
+    T: Debug + Send + TypeTag + Coherent + Reloc,
+{
+    type Event = HeapEvent<T>;
+
+    #[inline(always)]
+    fn with_queue_depth(mut self, queue_depth: usize) -> Self {
+        self.max_queue_depth = queue_depth;
+        self
+    }
+
+    #[inline(always)]
+    fn with_queue_policy(mut self, queue_policy: QueuePolicy) -> Self {
+        self.queue_policy = queue_policy;
+        self
+    }
+
+    #[inline(always)]
+    fn with_max_fan_in(mut self, fan_in: usize) -> Self {
+        self.max_fan_in = fan_in;
+        self
+    }
+
+    #[inline(always)]
+    fn with_max_fan_out(mut self, fan_out: usize) -> Self {
+        self.max_fan_out = fan_out;
+        self
+    }
+
+    fn build(self) -> ComResult<Self::Event> {
+        if self.max_fan_in > 1 {
+            Err(ComError::FanError)
+        } else if self.max_fan_out > 1 {
+            Err(ComError::FanError)
+        } else {
+            Ok(HeapEvent::new(
+                self.max_queue_depth,
+                self.queue_policy,
+                self.max_fan_in,
+                self.max_fan_out,
+            ))
+        }
     }
 }
 
-impl HeapEventBuilder {
+impl<T> HeapEventBuilder<T>
+where
+    T: Debug + Send + TypeTag + Coherent + Reloc,
+{
     #[inline(always)]
-    pub fn new() -> Self {
-        Self {}
+    pub(crate) fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+
+            max_queue_depth: 1,
+            queue_policy: QueuePolicy::ErrorOnFull,
+            max_fan_in: 1,
+            max_fan_out: 1,
+        }
     }
 }

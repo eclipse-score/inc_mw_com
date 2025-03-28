@@ -30,14 +30,14 @@
 //! The transport adapter provides methods to
 //! produce builders for the different communication patterns:
 //!
+//! - signal
 //! - Event
-//! - Topic
 //! - Remote Procedure
 //!
 //! Each of the elements can produce a sending and a receiving part.
 //!
-//! - Event: Notifier and Listener
-//! - Topic: Publisher and Subscriber
+//! - signal: Notifier and Listener
+//! - Event: Publisher and Subscriber
 //! - Remote Procedure: Invoker and Invokee
 //!
 //! ## API elements
@@ -70,227 +70,162 @@ use std::{
     time::Duration,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ComError {
+    LockError,
+    Timeout,
+    QueueEmpty,
+    QueueFull,
+    FanError,
+}
+
 /// Communication module result type
-pub type ComResult<T> = std::result::Result<T, Error>;
+pub type ComResult<T> = std::result::Result<T, ComError>;
 
-/// The `QueuePolicy` defines the overwrite policy of a queue when the queue is full.
-///
-#[derive(Debug, Clone, Copy)]
+////////////////////////////////////////////////////////////////
+//
+// Data elements
+//
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum QueuePolicy {
-    /// Raise an error if the queue is full.
-    Error,
-
-    /// Overwrite the oldest sample in the queue.
     OverwriteOldest,
-
-    /// Overwrite the latest sample in the queue.
-    OverwriteLatest,
+    OverwriteNewest,
+    ErrorOnFull,
 }
 
-/// The static configuration of a transport adapter.
-///
-/// The static configuration contains
-//TODO: Move to qor-core
-pub trait StaticConfig<A: Adapter + ?Sized>: Debug {
-    /// Get the name of the adapter
-    fn name() -> &'static str;
-
-    /// Get the vendor of the adapter
-    fn vendor() -> &'static str;
-
-    /// Get the version of the adapter
-    fn version() -> Version;
-}
 
 ////////////////////////////////////////////////////////////////
 //
-// Infrastructure elements
+// Information elements
 //
 
-/// The `NodeId` struct represents the unique identifier of a node in the communication network.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct NodeId(u32);
+////////////////////////////////////////////////////////////////
+// Signal
 
-impl NodeId {
-    pub const INVALID: NodeId = Self { 0: u32::MAX };
-    pub const BROADCAST: NodeId = Self { 0: u32::MAX - 1 };
-    pub const LOCAL: NodeId = Self { 0: u32::MAX - 2 };
-
-    /// Create a new node id with the given id number
-    #[inline(always)]
-    pub const fn new(id: u32) -> Self {
-        Self(id)
-    }
-
-    /// Check validity of node id
-    #[inline(always)]
-    pub const fn is_valid(&self) -> bool {
-        self.0 != Self::INVALID.0
-    }
+/// The signal notify trait is used by notifier implementations of signals to issue notifications.
+pub trait Notifier<A>: Debug + Send
+where
+    A: TransportAdapter + ?Sized,
+{
+    /// Notify all listeners of the signal.
+    fn notify(&self);
 }
 
-impl From<u32> for NodeId {
-    fn from(id: u32) -> Self {
-        Self::new(id)
-    }
+/// The signal listen trait is used by listener implementations of signals to listen for notifications.
+pub trait Listener<A>: Debug + Send
+where
+    A: TransportAdapter + ?Sized,
+{
+    /// Check the current state of the signal.
+    ///
+    /// Returns `true` if the signal is set. Does not change the state of the signal.
+    fn check(&self) -> ComResult<bool>;
+
+    /// Check the current state of the signal and reset the signal atomically.
+    ///
+    /// Returns `true` if the signal was set before the reset.
+    /// After this operation the signal is reset.
+    fn check_and_reset(&self) -> ComResult<bool>;
+
+    /// Wait for notifications of the signal.
+    ///
+    /// This blocks the current thread
+    fn wait(&self) -> ComResult<bool>;
+
+    /// Wait for notifications of the signal with a timeout.
+    ///
+    /// This blocks the current thread.
+    /// The boolean value indicates with `true` if the timeout has expired.
+    fn wait_timeout(&self, timeout: Duration) -> ComResult<bool>;
+
+    /// Wait asynchronously for notifications of the signal.
+    fn wait_async(&self) -> impl Future<Output = ComResult<bool>>;
+
+    /// Wait asynchronously for notification of the signal with timeout.
+    fn wait_timeout_async(&self, timeout: Duration) -> impl Future<Output = ComResult<bool>>;
 }
 
-impl Into<u32> for NodeId {
-    fn into(self) -> u32 {
-        self.0
-    }
+/// The `Signal` trait represents a reference to a signal in the communication system
+/// that can be used to notify listeners of a state change.
+pub trait Signal<A>: Debug + Clone + Send
+where
+    A: TransportAdapter + ?Sized,
+{
+    /// Associated Notifier type of the signal type
+    type Notifier: Notifier<A>;
+
+    /// Associated Listener type of the signal type
+    type Listener: Listener<A>;
+
+    /// Get a notifier for this signal
+    fn notifier(&self) -> ComResult<Self::Notifier>;
+
+    /// Get a listener for this signal
+    fn listener(&self) -> ComResult<Self::Listener>;
 }
 
-/// The `EndpointId` struct represents the unique identifier of an endpoint in the communication network.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EndpointId(u32);
+/// The Builder for a `Signal`
+pub trait SignalBuilder<A>: Debug
+where
+    A: TransportAdapter + ?Sized,
+{
+    /// The type of the created signal
+    type Signal: Signal<A>;
 
-impl EndpointId {
-    /// The invalid endpoint id
-    pub const INVALID: EndpointId = Self { 0: u32::MAX };
-
-    /// The broadcast endpoint id
-    pub const BROADCAST: EndpointId = Self { 0: u32::MAX - 1 };
-
-    /// The local endpoint id
-    pub const LOCAL: EndpointId = Self { 0: u32::MAX - 2 };
-
-    /// Create a new endpoint id with the given id number
-    #[inline(always)]
-    pub const fn new(id: u32) -> Self {
-        Self(id)
-    }
-
-    /// Check validity of endpoint id
-    #[inline(always)]
-    pub const fn is_valid(&self) -> bool {
-        self.0 != Self::INVALID.0
-    }
-}
-
-impl From<u32> for EndpointId {
-    fn from(id: u32) -> Self {
-        Self::new(id)
-    }
-}
-
-impl Into<u32> for EndpointId {
-    fn into(self) -> u32 {
-        self.0
-    }
-}
-
-/// The address of an endpoint in the communication network.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Address(u64);
-
-impl Address {
-    /// The invalid address
-    pub const INVALID: Address = Address::new(NodeId::INVALID, EndpointId::INVALID);
-
-    /// The address of the local node
-    pub const LOCALNODE: Address = Address::new(NodeId::LOCAL, EndpointId::INVALID);
-
-    /// The address of the broadcast node
-    #[inline(always)]
-    pub const fn new(node_id: NodeId, endpoint_id: EndpointId) -> Address {
-        Address {
-            0: (node_id.0 as u64) << 32 | endpoint_id.0 as u64,
-        }
-    }
-
-    #[inline(always)]
-    pub fn is_valid(&self) -> bool {
-        self.0 != Address::INVALID.0
-    }
-
-    #[inline(always)]
-    pub const fn node_id(&self) -> NodeId {
-        NodeId::new((self.0 >> 32) as u32)
-    }
-
-    #[inline(always)]
-    pub const fn endpoint_id(&self) -> EndpointId {
-        EndpointId::new((self.0 & 0xFFFF_FFFF) as u32)
-    }
-}
-
-/// The `Nodematch` struct is a selector for NodeIds through a mask and a set bit pattern.
-///
-/// The match is defined as `match := (node_id & mask) == set`.
-///
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Nodematch(u32, u32);
-
-impl Nodematch {
-    /// The any nodemask
-    pub const ANY: Nodematch = Nodematch::new(0x0000_0000, 0x0000_0000);
-
-    /// Create a new nodemask with the given mask and set pattern
-    #[inline(always)]
-    pub const fn new(mask: u32, set: u32) -> Self {
-        Self { 0: mask, 1: set }
-    }
-
-    /// Check if the given node id matches the nodemask
-    #[inline(always)]
-    pub const fn matches(&self, node_id: NodeId) -> bool {
-        (node_id.0 & self.0) == self.1
-    }
+    /// Build the signal
+    fn build(self) -> ComResult<Self::Signal>;
 }
 
 ////////////////////////////////////////////////////////////////
-//
-// Data access
-//
+// Event
 
-/// A `Buffer` provides a reference to a memory buffer with immutable value.
+/// A `Sample` provides a reference to a memory buffer with immutable value.
 ///
 /// By implementing the `Deref` trait implementations of the trait support the `.` operator for dereferencing.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait Buffer<'s, 't, TA, T>: Debug + Deref<Target = T> + Send + 's
+pub trait Sample<A, T>: Debug + Deref<Target = T> + Send
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    T: Debug + Send + TypeTag + Coherent + Reloc + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
 }
 
-/// A `BufferMut` provides a reference to a memory buffer with mutable value.
+/// A `SampleMut` provides a reference to a memory buffer with mutable value.
 ///
 /// By implementing the `DerefMut` trait implementations of the trait support the `.` operator for dereferencing.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait BufferMut<'s, 't, TA, T>: Debug + DerefMut<Target = T> + Send + 's
+pub trait SampleMut<A, T>: Debug + DerefMut<Target = T> + Send
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    T: Debug + Send + TypeTag + Coherent + Reloc + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    /// Convert the buffer into an immutable buffer.
-    fn into_buffer(self) -> impl Buffer<'s, 't, TA, T>;
+    /// The associated read-only sample type.
+    type Sample: Sample<A, T>;
+
+    /// Convert the sample into an immutable sample.
+    fn into_sample(self) -> Self::Sample;
+
+    /// Publish the sample and consume it.
+    fn publish(self) -> ComResult<()>;
 }
 
-/// A `BufferMaybeUninit` provides a reference to a memory buffer with a `MaybeUninit` value.
+/// A `SampleMaybeUninit` provides a reference to a memory buffer with a `MaybeUninit` value.
 ///
 /// Utilizing `DerefMut` on the buffer reveals a reference to the internal `MaybeUninit<T>`.
-/// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns a `BufferMutRef`.
+/// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns a `SampleMut`.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait BufferMaybeUninit<'s, 't, TA, T>: Debug + Send + 's
+pub trait SampleMaybeUninit<A, T>: Debug + Send
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    T: Debug + Send + TypeTag + Coherent + Reloc + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    /// Buffer type for immutable data after initialization
-    type Buffer: Buffer<'s, 't, TA, T>;
-
     /// Buffer type for mutable data after initialization
-    type BufferMut: BufferMut<'s, 't, TA, T>;
+    type SampleMut: SampleMut<A, T>;
 
     /// Write a value into the buffer and render it initialized.
     ///
     /// This corresponds to `MaybeUninit::write`.
-    fn write(self, value: T) -> Self::BufferMut;
+    fn write(self, value: T) -> Self::SampleMut;
 
     /// Get a mutable pointer to the internal maybe uninitialized `T`.
     ///
@@ -307,7 +242,7 @@ where
     /// # Safety
     ///
     /// The caller has to make sure to initialize the data in the buffer before calling this method.
-    unsafe fn assume_init(self) -> Self::BufferMut;
+    unsafe fn assume_init(self) -> Self::SampleMut;
 
     /// Render the buffer initialized for immutable access.
     ///
@@ -316,193 +251,69 @@ where
     /// # Safety
     ///
     /// The caller has to make sure to initialize the data in the buffer before calling this method.
-    unsafe fn assume_init_read<'a>(self) -> Self::Buffer;
+    unsafe fn assume_init_read(
+        self,
+    ) -> <<Self as SampleMaybeUninit<A, T>>::SampleMut as SampleMut<A, T>>::Sample;
 }
 
-////////////////////////////////////////////////////////////////
-//
-// Information elements
-//
-
-////////////////////////////////////////////////////////////////
-// Event
-
-/// The event notify trait is used by notifier implementations of events to issue notifications.
-pub trait Notifier<'s, 't, TA>: Debug + Send + 's
-where
-    TA: TransportAdapter<'t> + ?Sized,
-    't: 's,
-{
-    /// Notify all listeners of the event.
-    fn notify(&self);
-}
-
-/// The event listen trait is used by listener implementations of events to listen for notifications.
-pub trait Listener<'s, 't, TA>: Debug + Send + 's
-where
-    TA: TransportAdapter<'t> + ?Sized,
-    't: 's,
-{
-    /// Check the current state of the event.
-    ///
-    /// Returns `true` if the event is set. Does not change the state of the event.
-    fn check(&self) -> ComResult<bool>;
-
-    /// Check the current state of the event and reset the event atomically.
-    ///
-    /// Returns `true` if the event was set before the reset.
-    /// After this operation the event is reset.
-    fn check_and_reset(&self) -> ComResult<bool>;
-
-    /// Wait for notifications of the event.
-    ///
-    /// This blocks the current thread
-    fn wait(&self) -> ComResult<bool>;
-
-    /// Wait for notifications of the event with a timeout.
-    ///
-    /// This blocks the current thread.
-    /// The boolean value indicates with `true` if the timeout has expired.
-    fn wait_timeout(&self, timeout: Duration) -> ComResult<bool>;
-
-    /// Listen asynchronously for notifications of the event.
-    fn listen(&self) -> impl Future<Output = ComResult<bool>>;
-}
-
-pub trait Event<'s, 't, TA>: Debug + Clone + Send + 's
-where
-    TA: TransportAdapter<'t> + ?Sized,
-    't: 's,
-{
-    /// Get a notifier for this event
-    fn notifier(&self) -> ComResult<impl Notifier<'s, 't, TA>>;
-
-    /// Get a listener for this event
-    fn listener(&self) -> ComResult<impl Listener<'s, 't, TA>>;
-}
-
-/// The Builder for an `Event`
-pub trait EventBuilder<'t, TA>: Debug
-where
-    TA: TransportAdapter<'t> + ?Sized,
-{
-    /// Build the event
-    fn build<'a>(self) -> ComResult<impl Event<'a, 't, TA>>
-    where
-        't: 'a;
-}
-
-////////////////////////////////////////////////////////////////
-// Topic
-
-/// A `Publish` is a mutable data buffer used to write and publish loaned data.
-///
-/// Publish buffers only exist temporarily and are consumed by the publish operation.
-/// They can be obtained by loan operations of publishing elements.
-pub trait PublishBuffer<'s, 't, TA, T>: Debug + DerefMut<Target = T> + 's
-where
-    TA: TransportAdapter<'t> + ?Sized,
-    T: Debug + Send + TypeTag + Coherent + Reloc + 's,
-    't: 's,
-{
-    /// Publish the data in the buffer and consume the buffer.
-    fn publish(self) -> ComResult<()>;
-}
-
-/// A publish buffer with maybe uninitialized data.
-///
-/// This buffer can be used to write data into the buffer and publish it.
-/// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns a `PublishBuffer`.
-pub trait PublishBufferMaybeUninit<'s, 't, TA, T>: Debug + 's
-where
-    TA: TransportAdapter<'t> + ?Sized,
-    T: Debug + Send + TypeTag + Coherent + Reloc + 's,
-    't: 's,
-{
-    /// Write a value into the buffer and render it initialized.
-    ///
-    /// This corresponds to `MaybeUninit::write`.
-    fn write(self, value: T) -> impl PublishBuffer<'s, 't, TA, T>
-    where
-        Self: 's;
-
-    /// Get a mutable pointer to the internal maybe uninitialized `T`.
-    ///
-    /// This corresponds to `MaybeUninit::as_mut_ptr`.
-    ///
-    /// # Safety
-    ///
-    /// The caller has to make sure to initialize the data in the buffer.
-    /// Reading from the received pointer before initialization is undefined behavior.
-    ///
-    fn as_mut_ptr(&mut self) -> *mut T;
-
-    /// Render the buffer initialized for mutable access.
-    ///
-    /// This corresponds to `MaybeUninit::assume_init`.
-    unsafe fn assume_init(self) -> impl PublishBuffer<'s, 't, TA, T>;
-}
-
-/// The `Publisher` represents a publisher to a topic.
+/// The `Publisher` represents a publisher to a event.
 ///
 /// The publishing application obtains instances implementing this trait through
-/// topics created by a transport adapter.
-pub trait Publisher<'s, 't, TA, T>: Debug + Send + 's
+/// events created by a transport adapter.
+pub trait Publisher<A, T>: Debug + Send
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    T: Debug + Send + TypeTag + Coherent + Reloc + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    /// The buffer type eligible for reuse.
-    type ReuseBuffer: BufferMut<'s, 't, TA, T>;
+    /// The type of the uninitialized buffer for new data to be published.
+    type SampleMaybeUninit: SampleMaybeUninit<A, T>;
 
-    /// Loan an unitialized buffer for new data to be published.
+    /// Loan an unitialized sample for new data to be published.
     ///
     /// # Example
     ///
     /// ```rust
     /// let adapter = HeapAdapter::new();
     ///
-    /// let topic = adapter.topic::<u32>().build().unwrap();
-    /// let publisher = topic.publisher().unwrap();
+    /// let event = adapter.event::<u32>().build().unwrap();
+    /// let publisher = event.publisher().unwrap();
     ///
     /// let sample = publisher.loan_uninit().unwrap();
     /// let sample = sample.write(42);
     /// sample.send();
     /// ```
-    fn loan_uninit(&self) -> ComResult<impl PublishBufferMaybeUninit<'s, 't, TA, T> + 's>
-    where
-        T: 's,
-        't: 's;
+    fn loan_uninit(&self) -> ComResult<Self::SampleMaybeUninit>;
 
-    /// Loan a buffer with initialized data to be published.
+    /// Loan a sample with initialized data to be published.
     ///
     /// The implementation copies the given value into the buffer.
+    /// The type of the sample returned matches the sample types for the adapter used and is compatible with the SampleMaybeUninit type.
+    ///
+    /// The signature reads as `loan_with(&self, value: T) -> Result<SampleMut<T>>`.
     ///
     /// # Example
     ///
     /// ```rust
     /// let adapter = HeapAdapter::new();
     ///
-    /// let topic = adapter.topic::<u32>().build().unwrap();
-    /// let publisher = topic.publisher().unwrap();
+    /// let event = adapter.event::<u32>().build().unwrap();
+    /// let publisher = event.publisher().unwrap();
     ///
     /// let sample = publisher.loan(42).unwrap();
     /// sample.send();
     /// ```
-    fn loan_with(&self, value: T) -> ComResult<impl PublishBuffer<'s, 't, TA, T>>
-    where
-        T: 's,
-        't: 's;
+    fn loan_with(
+        &self,
+        value: T,
+    ) -> Result<
+        <<Self as Publisher<A, T>>::SampleMaybeUninit as SampleMaybeUninit<A, T>>::SampleMut,
+        ComError,
+    > {
+        let sample = self.loan_uninit()?;
+        Ok(sample.write(value))
+    }
 
-    /// Reuse a buffer for new data to be published.
-    ///
-    /// The buffer provided as argument is converted into a publish buffer for reuse.
-    /// The buffer is consumed by the operation. No memory allocation is performed.
-    ///
-    fn reuse(&self, buffer: Self::ReuseBuffer) -> ComResult<impl PublishBuffer<'s, 't, TA, T>>;
-
-    /// Public new data as copy to the topic.
+    /// Public new data as copy to the event.
     ///
     /// This requires a copy of the data for publication.
     #[inline(always)]
@@ -511,81 +322,89 @@ where
     }
 }
 
-/// The `Subscriber` trait represents the receiving end of published data on a topic.
-pub trait Subscriber<'s, 't, TA, T>: Debug + Send + 's
+/// The `Subscriber` trait represents the receiving end of published data on a event.
+pub trait Subscriber<A, T>: Debug + Send
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    T: Debug + Send + TypeTag + Coherent + Reloc + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    // type Buffer: BufferMut<TA, T>;
+    type Sample: Sample<A, T>;
 
     /// Check for new data and consume it if present.
-    fn try_receive(&self) -> ComResult<Option<impl BufferMut<'s, 't, TA, T>>>;
+    fn try_receive(&self) -> ComResult<Option<Self::Sample>>;
 
     /// Wait for new data to arrive.
     ///
     /// Upon success the method returns a receive buffer containing the new data.
-    fn receive(&self) -> ComResult<impl BufferMut<'s, 't, TA, T>>;
+    fn receive(&self) -> ComResult<Self::Sample>;
 
     /// Wait for new data to arrive with a timeout.
     ///
     /// The `ComResult` of the tuple contains the upon success a receive buffer containing the new data.
-    fn receive_timeout(&self, timeout: Duration) -> ComResult<impl BufferMut<'s, 't, TA, T>>;
+    fn receive_timeout(&self, timeout: Duration) -> ComResult<Self::Sample>;
 
     /// Receive new data asynchronously.
     ///
     /// This method returns a future that can be used to `await` the arrival of new data.
-    fn receive_async(&self) -> impl Future<Output = ComResult<impl BufferMut<'s, 't, TA, T>>>;
+    fn receive_async(&self) -> impl Future<Output = ComResult<Self::Sample>> + Send;
+
+    /// Receive new data asynchronously with timeout.
+    ///
+    /// This method returns a future that can be used to `await` the arrival of new data.
+    fn receive_timeout_async(
+        &self,
+        timeout: Duration,
+    ) -> impl Future<Output = ComResult<Self::Sample>> + Send;
 }
 
-/// The `Topic` trait references to the implementation of a topic in the underlying transport framework.
+/// The `Event` trait references to the implementation of a event in the underlying transport framework.
 ///
-/// A topic can only be created through the `topic` method of the corresponding transport adapter.
-/// The publishers and subscribers can be obtained through the topics `publisher` and `subscriber` methods, respectively.
+/// A event can only be created through the `event` method of the corresponding transport adapter.
+/// The publishers and subscribers can be obtained through the events `publisher` and `subscriber` methods, respectively.
 ///
-pub trait Topic<'s, 't, TA, T>: Debug + Clone + Send + 's
+pub trait Event<A, T>: Debug + Clone + Send
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    T: Debug + Send + TypeTag + Coherent + Reloc + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    /// Get a publisher for this topic
-    ///
-    /// The method succees if the topic still accepts new publishers.
-    /// The fan-in of a topic is limited by the configuration given to the builder when creating the topic.
-    fn publisher(&self) -> ComResult<impl Publisher<'s, 't, TA, T>>;
+    type Publisher: Publisher<A, T>;
+    type Subscriber: Subscriber<A, T>;
 
-    /// Get a subscriber for this topic
+    /// Get a publisher for this event
     ///
-    /// The method succeeds if the topic still accepts new subscribers.
-    /// The fan-out of a topic is limited by the configuration given to the builder when creating the topic.    
-    fn subscriber(&self) -> ComResult<impl Subscriber<'s, 't, TA, T>>;
+    /// The method succees if the event still accepts new publishers.
+    /// The fan-in of a event is limited by the configuration given to the builder when creating the event.
+    fn publisher(&self) -> ComResult<Self::Publisher>;
+
+    /// Get a subscriber for this event
+    ///
+    /// The method succeeds if the event still accepts new subscribers.
+    /// The fan-out of a event is limited by the configuration given to the builder when creating the event.    
+    fn subscriber(&self) -> ComResult<Self::Subscriber>;
 }
 
-/// The Builder for a `Topic`
-pub trait TopicBuilder<'t, TA, T>: Debug
+/// The Builder for a `Event`
+pub trait EventBuilder<A, T>: Debug
 where
-    TA: TransportAdapter<'t> + ?Sized,
+    A: TransportAdapter + ?Sized,
     T: TypeTag + Coherent + Reloc + Send + Debug,
 {
-    /// Set the queue depth of the topic.
+    type Event: Event<A, T>;
+
+    /// Set the queue depth of the event.
     fn with_queue_depth(self, queue_depth: usize) -> Self;
 
-    /// Set the queue policy of the topic.
+    /// Set the queue policy of the event.
     fn with_queue_policy(self, queue_policy: QueuePolicy) -> Self;
 
-    /// Set the fan-in of the topic which limits the number of publishers.
+    /// Set the fan-in of the event which limits the number of publishers.
     fn with_max_fan_in(self, fan_in: usize) -> Self;
 
-    /// Set the fan-out of the topic which limits the number of subscribers.
+    /// Set the fan-out of the event which limits the number of subscribers.
     fn with_max_fan_out(self, fan_out: usize) -> Self;
 
-    /// Build the topic
-    fn build<'a>(self) -> ComResult<impl Topic<'a, 't, TA, T>>
-    where
-        T: 'a,
-        't: 'a;
+    /// Build the event
+    fn build(self) -> ComResult<Self::Event>;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -595,35 +414,91 @@ where
 pub trait ParameterPack: Debug + Send + TypeTag + Coherent + Reloc + Tuple {}
 
 /// A return value is a marker that combines the TypeTag, Coherent and Reloc traits.
-pub trait Return: Debug + Send + TypeTag + Coherent + Reloc {}
+pub trait ReturnValue: Debug + Send + TypeTag + Coherent + Reloc {}
 
-/// The `RequestMessage` is a tuple with a tag, a transaction counter and the arguments of a remote procedure call.
-///
-/// The tag is a unique tag that identifies the client that sends the request.
-/// The transaction counter is a monotonous counter that identifies the individual transaction of that client.
-/// The `Args` tuple contains the arguments of the remote procedure call.
-pub type RequestMessage<Args>
+
+/// The `Request` is a read-only invocation request used on service side for incoming invocations
+pub trait Request<A, Args>:
+    Debug + Send + Deref<Target = Args>
 where
+    A: TransportAdapter + ?Sized,
     Args: ParameterPack,
-= (Tag, usize, Args);
+{
+    type ResponseMaybeUninit<R>: ResponseMaybeUninit<A, R> where R: ReturnValue;
 
-/// The `ResponseMessage` is a tuple with a transaction counter and the result of a remote procedure call.
-///
-/// The transaction counter is the counter of the request this response is related to.
-/// The `R` type contains the result of the remote procedure call.
-pub type ResponseMessage<R>
+    fn prepare_response_uninit<R>(&self) -> ComResult<Self::ResponseMaybeUninit<R>> where R: ReturnValue;
+    fn prepare_response<R>(&self) -> ComResult<<<Self as Request<A, Args>>::ResponseMaybeUninit<R> as ResponseMaybeUninit<A, R>>::ResponseMut> where R: ReturnValue;
+}
+
+/// A `RequestMut` is a mutable invocation request used on client side for invocations
+pub trait RequestMut<A, Args>:
+    Debug + Send + From<Args> + DerefMut<Target = Args>
 where
-    R: Return,
-= (usize, R);
+    A: TransportAdapter + ?Sized,
+    Args: ParameterPack,
+{
+    fn send(&self) -> ComResult<()>;
+}
+
+/// A `RequestMaybeUninit` is an uninitialized invocation request used on client side for invocations
+pub trait RequestMaybeUninit<A, Args>:
+    Debug + Send + TypeTag + Coherent + Reloc
+where
+    A: TransportAdapter + ?Sized,
+    Args: ParameterPack,
+{
+    type RequestMut: RequestMut<A, Args>;
+
+    fn write(self, args: Args) -> Self::RequestMut;
+    fn as_mut_ptr(&mut self) -> *mut Args;
+    unsafe fn assume_init(self) -> Self::RequestMut;
+}
+
+
+/// The `Response` is an immutable response to a remote procedure call used on client side for receiving results.
+pub trait Response<A, R>: Debug + Send + Deref<Target = R> 
+where
+    A: TransportAdapter + ?Sized,
+    R: ReturnValue,
+{
+}
+
+/// The `ResponseMut` is a mutable response of a remote procedure call used on service side for sending results.
+pub trait ResponseMut<A, R>: Debug + Send + DerefMut<Target = R> 
+where
+    A: TransportAdapter + ?Sized,
+    R: ReturnValue,
+{
+    fn send(&self) -> ComResult<()>;
+}
+
+/// The `ResponseMaybeUninit` is an uninitialized response of a remote procedure call used on service side for sending results.
+pub trait ResponseMaybeUninit<A, R>: Debug + Send
+where
+    A: TransportAdapter + ?Sized,
+    R: ReturnValue,
+{
+    type ResponseMut: ResponseMut<A, R>;
+
+    fn write(self, value: R) -> Self::ResponseMut;
+    fn as_mut_ptr(&mut self) -> *mut R;
+    unsafe fn assume_init(self) -> Self::ResponseMut;
+}
+
 
 /// The Invoker trait is implemented by the client side of remote procedures.
-pub trait Invoker<'s, 't, TA, Args, R>: Debug + 's
+pub trait Invoker<A, Args, R>: Debug
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    Args: ParameterPack + 's,
-    R: Return + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    Args: ParameterPack,
+    R: ReturnValue,
 {
+    type Request: RequestMaybeUninit<A, Args>;
+    type Response: Response<A, R>;
+
+    type RequestSampleMaybeUninit: SampleMaybeUninit<A, Self::Request>;
+    type ResponseSubscriber: Subscriber<A, Self::Response>;
+
     /// Announce the remote procedure invoker to the remote side.
     ///
     /// This is a one-time operation that announces the remote procedure to the remote side.
@@ -638,16 +513,26 @@ where
     /// Revoke the announcement of the remote procedure invoker from the remote side.
     ///
     /// This is a one-time operation that revokes the announcement of the remote procedure from the remote side.
-    /// Eventually existing channels to the remote side will be closed and corresponding resources will be released.
+    /// signalually existing channels to the remote side will be closed and corresponding resources will be released.
     #[inline(always)]
     fn revoke(&self) -> ComResult<()> {
         Ok(())
     }
 
+    /// Prepare an invocation with uninizialized arguments.
+    ///
+    /// This loans a buffer for uninitialized arguments and also prepares a subscriber for the result.
+    /// Writing arguments into the buffer and publishing the returned InvokeArgsBuffer will trigger the Method invocation.
+    ///
+    /// The result subscriber can be used to wait for the result of the rpc invocation.
+    fn prepare_uninit(
+        &self,
+    ) -> ComResult<(Self::RequestSampleMaybeUninit, Self::ResponseSubscriber)>;
+
     /// Prepare an invocation with arguments.
     ///
     /// This loans a buffer with given arguments and also prepares a subscriber for the result.
-    /// Publishing the returned `Publish` element will trigger the Rpc invocation.
+    /// Publishing the returned `Publish` element will trigger the Method invocation.
     ///
     /// The buffer to publish the arguments has three parts:
     ///
@@ -662,54 +547,92 @@ where
     ///
     /// The result subscriber can be used to wait for the result of the rpc invocation.
     fn prepare(
-        &'s self,
+        &self,
         args: Args,
     ) -> ComResult<(
-        impl PublishBuffer<'s, 't, TA, RequestMessage<Args>>,
-        impl Subscriber<'s, 't, TA, ResponseMessage<R>>,
-    )>;
+        <<Self as Invoker<A, Args, R>>::RequestSampleMaybeUninit as SampleMaybeUninit<
+            A,
+            Self::Request,
+        >>::SampleMut,
+        Self::ResponseSubscriber,
+    )> {
+        let (args_event, res) = self.prepare_uninit()?;
+        let args_event = args_event.write(Self::Request::from(args));
+        Ok((args_event, res))
+    }
 
-    /// Prepare an invocation with uninizialized arguments.
-    ///
-    /// This loans a buffer for uninitialized arguments and also prepares a subscriber for the result.
-    /// Writing arguments into the buffer and publishing the returned InvokeArgsBuffer will trigger the Rpc invocation.
-    ///
-    /// The result subscriber can be used to wait for the result of the rpc invocation.
-    fn prepare_uninit(
-        &'s self,
-    ) -> ComResult<(
-        impl PublishBufferMaybeUninit<'s, 't, TA, RequestMessage<Args>>,
-        impl Subscriber<'s, 't, TA, ResponseMessage<R>>,
-    )>;
-
-    /// Synchronously invoke the Rpc with the given arguments as blocking operation.
+    /// Synchronously invoke the Method with the given arguments as blocking operation.
     ///
     /// The operation will copy the arguments into the buffer used for the invocation.
     ///
-    /// This operation will block until the result of the Rpc invocation is available.
-    /// The result of a completed Rpc operation will always wrap into a `ComResult` as the communication itself may fail.
-    fn invoke(&'s self, args: Args) -> ComResult<impl BufferMut<'s, 't, TA, ResponseMessage<R>>>;
+    /// This operation will block until the result of the Method invocation is available.
+    /// The result of a completed Method operation will always wrap into a `ComResult` as the communication itself may fail.
+    fn invoke(
+        &self,
+        args: Args,
+    ) -> ComResult<<Self::ResponseSubscriber as Subscriber<A, Self::Response>>::Sample> {
+        let (args, res) = self.prepare(args)?;
+        args.publish()?;
+        res.receive()
+    }
 
-    /// Invoke the Rpc with the given arguments as asynchronous operation.
+    /// Synchronously invoke the Method with the given arguments as blocking operation with timeout.
+    ///
+    /// The operation will copy the arguments into the buffer used for the invocation.
+    ///
+    /// This operation will block until the result of the Method invocation is available or the timeout occurs.
+    /// The result of a completed Method operation will always wrap into a `ComResult` as the communication itself may fail.
+    fn invoke_timeout(
+        &self,
+        args: Args,
+        timeout: Duration,
+    ) -> ComResult<<Self::ResponseSubscriber as Subscriber<A, Self::Response>>::Sample> {
+        let (args, res) = self.prepare(args)?;
+        args.publish()?;
+        res.receive_timeout(timeout)
+    }
+
+    /// Invoke the Method with the given arguments as asynchronous operation.
     ///
     /// The operation will copy the arguments into the buffer used for the invocation.
     ///
     /// This operation does not block. Instead, it will return a future that, when awaited, will provide the result of the rpc invocation.
-    /// The result of a completed Rpc operation will always wrap into a `ComResult` as the communication itself may fail.
+    /// The result of a completed Method operation will always wrap into a `ComResult` as the communication itself may fail.
     fn invoke_async(
-        &'s self,
+        &self,
         args: Args,
-    ) -> impl Future<Output = ComResult<impl BufferMut<'s, 't, TA, ResponseMessage<R>>>>;
+    ) -> impl Future<
+        Output = ComResult<<Self::ResponseSubscriber as Subscriber<A, Self::Response>>::Sample>,
+    > + Send;
+
+    /// Invoke the Method with the given arguments as asynchronous operation.
+    ///
+    /// The operation will copy the arguments into the buffer used for the invocation.
+    ///
+    /// This operation does not block. Instead, it will return a future that, when awaited, will provide the result of the rpc invocation.
+    /// The result of a completed Method operation will always wrap into a `ComResult` as the communication itself may fail.
+    fn invoke_timeout_async(
+        &self,
+        args: Args,
+        timeout: Duration,
+    ) -> impl Future<
+        Output = ComResult<<Self::ResponseSubscriber as Subscriber<A, Self::Response>>::Sample>,
+    > + Send;
 }
 
 /// The `Invokee` trait represents the service side of a remote procedure.
-pub trait Invokee<'s, 't, TA, Args, R>: Debug + 's
+pub trait Invokee<A, Args, R>: Debug
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    Args: ParameterPack + 's,
-    R: Return + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    Args: ParameterPack,
+    R: ReturnValue,
 {
+    type Request: ReceiveRequest<A, Args>;
+    type Response: SendResponse<A, R>;
+
+    type RequestSample: Sample<A, Self::Request>;
+    type ResponseSampleMaybeUninit: SampleMaybeUninit<A, Self::Response>;
+
     /// test if an incoming request is present and return the corresponding buffers.
     ///
     /// The method returns a tuple with the received arguments buffer and the result publish buffer.
@@ -718,36 +641,42 @@ where
     /// The execution completion is signaled by publishing the result buffer.
     ///
     /// When the incoming queue is empty, the method returns `None`.
-    fn try_accept(
-        &'s self,
-    ) -> ComResult<
-        Option<(
-            impl Buffer<'s, 't, TA, RequestMessage<Args>>,
-            impl PublishBufferMaybeUninit<'s, 't, TA, ResponseMessage<R>>,
-        )>,
-    >;
+    fn try_accept(&self) -> ComResult<Option<(Self::RequestSample, Self::ResponseSampleMaybeUninit)>>;
 
     /// wait for incoming calls blocking the current thread.
-    fn accept(
-        &'s self,
-    ) -> ComResult<(
-        impl Buffer<'s, 't, TA, RequestMessage<Args>>,
-        impl PublishBufferMaybeUninit<'s, 't, TA, ResponseMessage<R>>,
-    )>;
+    fn accept(&self) -> ComResult<(Self::RequestSample, Self::ResponseSampleMaybeUninit)>;
 
     /// wait for incoming calls with a timeout blocking the current thread.
     fn accept_timeout(
-        &'s self,
+        &self,
         timeout: Duration,
-    ) -> ComResult<(
-        impl Buffer<'s, 't, TA, RequestMessage<Args>>,
-        impl PublishBufferMaybeUninit<'s, 't, TA, ResponseMessage<R>>,
-    )>;
+    ) -> ComResult<(Self::RequestSample, Self::ResponseSampleMaybeUninit)>;
 
-    /// wait for incoming invocations and return the result of the call of the given function with the received arguments.
-    fn accept_and_call<F: Fn(&Args) -> R>(&'s self, f: F) -> ComResult<()> {
+    /// wait for incoming invocations and return the result of the execution of the given function with the received arguments.
+    fn accept_and_execute<F>(&self, f: F) -> ComResult<()>
+    where
+        F: Fn(&Args) -> R,
+    {
         // wait for incoming invocations
         let (req, res) = self.accept()?;
+
+        // call the function with the received arguments
+        let result = f(req.deref());
+
+        // build and send the response
+        let res = 
+        let res = res.write((*transaction, result));
+        res.publish()?;
+        Ok(())
+    }
+
+    /// wait for incoming invocations with timeout and return the result of the execution of the given function with the received arguments.
+    fn accept_timeout_and_execute<F>(&self, f: F, timeout: Duration) -> ComResult<()>
+    where
+        F: Fn(&Args) -> R,
+    {
+        // wait for incoming invocations
+        let (req, res) = self.accept_timeout(timeout)?;
         let (_client_tag, transaction, args) = &*req;
 
         // call the function with the received arguments
@@ -760,11 +689,10 @@ where
     }
 
     /// wait for incoming invocations with a timeout and return the result of the call of the given function with the received arguments.
-    fn accept_timeout_and_call<F: Fn(&Args) -> R>(
-        &'s self,
-        timeout: Duration,
-        f: F,
-    ) -> ComResult<()> {
+    fn accept_timeout_and_call<F>(&self, timeout: Duration, f: F) -> ComResult<()>
+    where
+        F: Fn(&Args) -> R,
+    {
         let (req, res) = self.accept_timeout(timeout)?;
         let (_client_tag, transaction, args) = &*req;
 
@@ -780,24 +708,27 @@ where
     /// accept creates a future that waits for incoming calls on the remote procedure port and
     /// returns the arguments and a result publish buffer.
     fn accept_async(
-        &'s self,
-    ) -> impl Future<
-        Output = ComResult<(
-            impl Buffer<'s, 't, TA, RequestMessage<Args>>,
-            impl PublishBufferMaybeUninit<'s, 't, TA, ResponseMessage<R>>,
-        )>,
-    > + Send;
+        &self,
+    ) -> impl Future<Output = ComResult<(Self::RequestSample, Self::ResponseSampleMaybeUninit)>> + Send;
+
+    /// accept creates a future that waits with a timeout for incoming calls on the remote procedure port and
+    /// returns the arguments and a result publish buffer.
+    fn accept_timeout_async(
+        &self,
+        timeout: Duration,
+    ) -> impl Future<Output = ComResult<(Self::RequestSample, Self::ResponseSampleMaybeUninit)>> + Send;
 
     /// create a future that waits for incoming calls on the remote procedure port and
-    /// returns the result of the invocation of the given function with the received arguments.
-    fn accept_async_and_call<F: Fn(&Args) -> R>(
-        &'s self,
-        f: F,
-    ) -> impl Future<Output = ComResult<()>> {
+    /// returns the result of the invocation of the given async function with the received arguments.
+    fn accept_and_execute_async<F, Fut>(&self, f: F) -> impl Future<Output = ComResult<()>>
+    where
+        F: Fn(&Args) -> Fut + Send,
+        Fut: Future<Output = R> + Send,
+    {
         async move {
             let (req, res) = self.accept_async().await?;
             let (_client_tag, transaction, args) = &*req;
-            let result = f(args);
+            let result = f(args).await;
             let res = res.write((*transaction, result));
             res.publish()?;
             Ok(())
@@ -806,13 +737,11 @@ where
 
     /// create a future that waits for incoming calls on the remote procedure port and
     /// returns the result of the invocation of the given async function with the received arguments.
-    fn accept_async_and_call_async<
+    fn accept_timeout_and_execute_async<F, Fut>(&self, f: F) -> impl Future<Output = ComResult<()>>
+    where
         F: Fn(&Args) -> Fut + Send,
-        Fut: Future<Output = R> + Send + 's,
-    >(
-        &'s self,
-        f: F,
-    ) -> impl Future<Output = ComResult<()>> {
+        Fut: Future<Output = R> + Send,
+    {
         async move {
             let (req, res) = self.accept_async().await?;
             let (_client_tag, transaction, args) = &*req;
@@ -825,42 +754,42 @@ where
 }
 
 /// The `RemoteProcedure` trait represents a remote procedure call.
-pub trait RemoteProcedure<'s, 't, TA, Args, R>: Debug + Clone + Send + 's
+pub trait Method<A, Args, R>: Debug + Clone + Send
 where
-    TA: TransportAdapter<'t> + ?Sized,
-    Args: ParameterPack + 's,
-    R: Return + 's,
-    't: 's,
+    A: TransportAdapter + ?Sized,
+    Args: ParameterPack,
+    R: ReturnValue,
 {
+    type Invoker: Invoker<A, Args, R>;
+    type Invokee: Invokee<A, Args, R>;
+
     /// Get a client-side invoker for this remote procedure
-    fn invoker(&self) -> ComResult<impl Invoker<'s, 't, TA, Args, R>>;
+    fn invoker(&self) -> ComResult<Self::Invoker>;
 
     /// Get a service-side invokee for this remote procedure
-    fn invokee(&self) -> ComResult<impl Invokee<'s, 't, TA, Args, R>>;
+    fn invokee(&self) -> ComResult<Self::Invokee>;
 }
 
 /// The Builder for an `RemoteProcedure`
-pub trait RemoteProcedureBuilder<'t, TA, Args, R>: Debug
+pub trait MethodBuilder<A, Args, R>: Debug
 where
-    TA: TransportAdapter<'t> + ?Sized,
+    A: TransportAdapter + ?Sized,
     Args: ParameterPack,
-    R: Return,
+    R: ReturnValue,
 {
-    /// Set the queue depth of the topic.
+    type Method: Method<A, Args, R>;
+
+    /// Set the queue depth of the event.
     fn with_queue_depth(self, queue_depth: usize) -> Self;
 
-    /// Set the queue policy of the topic.
+    /// Set the queue policy of the event.
     fn with_queue_policy(self, queue_policy: QueuePolicy) -> Self;
 
-    /// Set the max fan-in of the topic which limits the number of publishers.
+    /// Set the max fan-in of the event which limits the number of publishers.
     fn with_max_clients(self, fan_in: usize) -> Self;
 
     /// build the remote procedure
-    fn build<'a>(self) -> ComResult<impl RemoteProcedure<'a, 't, TA, Args, R>>
-    where
-        Args: 'a,
-        R: 'a,
-        't: 'a;
+    fn build(self) -> ComResult<Self::Method>;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -868,48 +797,64 @@ where
 // The transport adapter
 //
 
+pub trait StaticConfig<A>: Debug
+where
+    A: Adapter + ?Sized,
+{
+    /// Get the class name of the adapter.
+    fn name() -> &'static str;
+
+    /// Get the vendor of the adapter
+    fn vendor() -> &'static str;
+
+    /// Get the version of the adapter.
+    fn version() -> Version;
+}
+
 /// An adapter is an abstraction that connects to an underlying framework implementation
 //TODO: Move to qor-core
 pub trait Adapter: Debug {
     type StaticConfig: StaticConfig<Self>;
 
     /// Get the static configuration of the adapter.
-    fn static_config(&self) -> &'static Self::StaticConfig;
+    fn static_config<'a>(&self) -> &'a Self::StaticConfig;
 }
 
 /// A transport adapter connects to a memory provision framework.
 ///
 /// The provision framework must be able to provide memory buffers for raw data access
-/// as well a providing the fundamental communication elements like topics, events and rpcs.
+/// as well a providing the fundamental communication elements like events, signals and rpcs.
 ///
 /// All elements connected with an adapter carry the type of the adapter as a type parameter.
-/// This prevents at compile time that elements from different adapter types can be mixed up.
+/// This prsignals at compile time that elements from different adapter types can be mixed up.
 ///
-pub trait TransportAdapter<'t>: Adapter {
-    /// Get an event builder.
-    ///
-    /// Events signal the occurrence of a state change.
-    /// They issue notifiers to emit the signal and listeners to wait for the signal.
-    fn event<'a>(&'t self, label: Label) -> impl EventBuilder<'t, Self>
+pub trait TransportAdapter: Adapter {
+    type SignalBuilder: SignalBuilder<Self>;
+    type EventBuilder<T>: EventBuilder<Self, T>
     where
-        't: 'a;
+        T: TypeTag + Coherent + Reloc + Send + Debug;
+    type MethodBuilder<Args, R>: MethodBuilder<Self, Args, R>
+    where
+        Args: ParameterPack,
+        R: ReturnValue;
 
-    /// Get a topic builder for the given type.
+    /// Get an signal builder.
     ///
-    /// Topics are information elements transporting values of a given type.
+    /// signals signal the occurrence of a state change.
+    /// They issue notifiers to emit the signal and listeners to wait for the signal.
+    fn signal(&self, label: Label) -> Self::SignalBuilder;
+
+    /// Get a event builder for the given type.
+    ///
+    /// Events are information elements transporting values of a given type.
     /// They issue publishers that publish new values and subscribers that receive the values.
-    fn topic<'a, T>(&'t self, label: Label) -> impl TopicBuilder<'t, Self, T>
+    fn event<T>(&self, label: Label) -> Self::EventBuilder<T>
     where
-        T: TypeTag + Coherent + Reloc + Send + Debug + 'a,
-        't: 'a;
+        T: TypeTag + Coherent + Reloc + Send + Debug;
 
     /// Get a remote procedure builder for the given argument and result types.
-    fn remote_procedure<'a, Args, R>(
-        &self,
-        label: Label,
-    ) -> impl RemoteProcedureBuilder<'t, Self, Args, R>
+    fn method<Args, R>(&self, label: Label) -> Self::MethodBuilder<Args, R>
     where
-        Args: ParameterPack + 'a,
-        R: Return + 'a,
-        't: 'a;
+        Args: ParameterPack,
+        R: ReturnValue;
 }

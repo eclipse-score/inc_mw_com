@@ -1,0 +1,1 @@
+impl Future<Output = Result<<<Self as base::Invoker<A, Args, R>>::ResultSubscriber as base::Subscriber<A, (usize, R)>>::Sample, ComError>> + Send
