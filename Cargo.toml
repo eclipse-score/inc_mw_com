@@ -1,0 +1,3 @@
+[workspace]
+members = ["com-api", "com-api-example"]
+resolver = "3"

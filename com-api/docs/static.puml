@@ -1,0 +1,41 @@
+@startuml
+
+interface Builder {
+    type Output
+    build() : Self::Output
+}
+
+' Also called "Node"
+interface Runtime
+
+Interface RuntimeBuilder {
+    type Output: Runtime
+    load_config(&mut self, config: &Path): &mut Self
+    build(self): Self::Runtime
+}
+
+Builder <|-- RuntimeBuilder
+RuntimeBuilder ..> Runtime : builds
+
+interface Deref
+interface DerefMut
+Deref <|-- DerefMut
+
+class Sample<T>
+Deref <|-- Sample : Target=T
+
+class SampleMut<T> {
+    send(self) : Result
+}
+DerefMut <|-- SampleMut : Target=T
+
+class SampleMaybeUninit<T> {
+    assume_init(self) : SampleMut
+    write(self, data) : SampleMut
+    init_default(self) : SampleMut for T: Default
+}
+DerefMut <|-- SampleMaybeUninit : Target=MaybeUninit<T>
+
+SampleMaybeUninit ..> SampleMut : builds
+
+@enduml
