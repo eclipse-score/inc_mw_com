@@ -40,11 +40,10 @@ pub struct TransmissionData {
 
 struct ScorePubSubBuilder {
     service_name: Option<String>,
-    //
 }
 
 impl ScorePubSubBuilder {
-    pub fn load_from_config(&mut self, json_config_file: &str) {
+    pub fn _load_from_config(&mut self, _json_config_file: &str) {
         // ... todo .. load json into builder config ...
         /***
         ```json
@@ -128,7 +127,7 @@ where
         // iterate over all bound transports and send the sample off
 
         // mqtt transport will serialize (and thus copy it) before sending it off
-        self.mqtt_transport.send_sample(&sample.payload());
+        self.mqtt_transport.send_sample(sample.payload());
 
         // Option to speed things up:
         // implement a subscriber for all non-time-critical transports and thus allow the producer
@@ -163,13 +162,10 @@ impl MqttTransport {
 
         // Implementation detail of rust mqtt client, we need such a thread in the background for housekeeping
         let mqtt_notification_thread = thread::spawn(move || {
-            for (i, notification) in connection.iter().enumerate() {
+            for notification in connection.iter() {
                 match notification {
-                    Ok(notif) => {
-                        //println!("{i}. Notification = {notif:?}");
-                    }
-                    Err(error) => {
-                        //println!("{i}. Notification = {error:?}");
+                    Ok(_) => {}
+                    Err(_) => {
                         return;
                     }
                 }
@@ -240,7 +236,10 @@ where
 }
 
 fn main() -> Result<(), Box<dyn core::error::Error>> {
-    let score_com_frontend = ScorePubSubBuilder::new() // Get a builder
+    // Note: The frontend is basically a layer lower than the Runtime we talked about at the workshop on 2025-03-27.
+
+    // The frontend we build is typed for TransmissionData
+    let score_com_frontend: ScorePubSub<TransmissionData> = ScorePubSubBuilder::new() // Get a builder
         .service_name("/score_example2") // configure the frontend
         .build::<TransmissionData>()?; // build the transport and the bindings (already bound to TransmissionData datatype)
 
