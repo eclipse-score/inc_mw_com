@@ -8,7 +8,6 @@
 use super::HeapAdapter;
 
 use crate::base::*;
-use qor_core::prelude::*;
 
 use std::{
     fmt::Debug,
@@ -34,10 +33,10 @@ impl Clone for HeapSignal {
     }
 }
 
-impl Notifier<HeapAdapter> for HeapSignal
+impl Emitter<HeapAdapter> for HeapSignal
 {
     // Notify the event by setting the flag and waking up all listeners
-    fn notify(&self) {
+    fn emit(&self) {
         let mut event = self.event.0.lock().unwrap();
         *event = true;
         self.event.1.notify_all();
@@ -125,10 +124,10 @@ impl Listener<HeapAdapter> for HeapSignal
 
 impl Signal<HeapAdapter> for HeapSignal
 {
-    type Notifier = Self;
+    type Emitter = Self;
     type Listener = Self;
     
-    fn notifier(&self) -> ComResult<Self::Notifier> {
+    fn emit(&self) -> ComResult<Self::Emitter> {
         Ok(self.clone())
     }
 

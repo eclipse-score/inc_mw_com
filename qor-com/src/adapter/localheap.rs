@@ -11,16 +11,14 @@ use qor_core::prelude::*;
 
 use std::fmt::Debug;
 
-mod sample;
-
 mod signal;
 pub use signal::*;
 
 mod event;
 pub use event::*;
 
-mod method;
-pub use method::*;
+mod remote_procedure;
+pub use remote_procedure::*;
 
 //
 // The TransportAdapter implementation
@@ -72,7 +70,7 @@ impl TransportAdapter for HeapAdapter {
         = HeapEventBuilder<T>
     where
         T: Debug + Send + TypeTag + Coherent + Reloc;
-    type MethodBuilder<Args, R>
+    type RemoteProcedureBuilder<Args, R>
         = HeapMethodBuilder<Args, R>
     where
         Args: ParameterPack,
@@ -92,7 +90,7 @@ impl TransportAdapter for HeapAdapter {
     }
 
     /// Create a new remote_procedure_call on the local heap
-    fn method<Args, R>(&self, label: Label) -> Self::MethodBuilder<Args, R>
+    fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
     where
         Args: ParameterPack,
         R: ReturnValue,
@@ -114,14 +112,14 @@ mod test {
     }
 
     #[test]
-    fn test_heap_event_threading() {
+    fn test_heap_signal_threading() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
         static ADAPTER: std::sync::LazyLock<HeapAdapter> =
             std::sync::LazyLock::new(|| HeapAdapter::new());
 
-        let event = ADAPTER.signal(Label::INVALID).build().unwrap();
+        let signal = ADAPTER.signal(Label::INVALID).build().unwrap();
 
-        let notifier = event.notifier().unwrap();
+        let notifier = signal.trigger().unwrap();
         let handle_notifier = std::thread::spawn(move || {
             let span = span!(Level::INFO, "thread_proc_notify");
             let _guard = span.enter();
@@ -129,10 +127,10 @@ mod test {
             info!("start notify");
             thread::sleep(Duration::from_millis(1000));
             info!("sending notification");
-            notifier.notify();
+            notifier.emit();
         });
 
-        let listener = event.listener().unwrap();
+        let listener = signal.listener().unwrap();
         let handle_listener = std::thread::spawn(move || {
             let span = span!(Level::INFO, "thread_proc_listen");
             let _guard = span.enter();
@@ -150,16 +148,16 @@ mod test {
     }
 
     #[test]
-    fn test_heap_topic() {
+    fn test_heap_event() {
         let adapter = HeapAdapter::new();
-        let topic = adapter
-            .topic::<u32>(Label::INVALID)
+        let event = adapter
+            .event::<u32>(Label::INVALID)
             .with_queue_depth(4)
             .build()
             .unwrap();
 
-        let publisher = topic.publisher().unwrap();
-        let subscriber = topic.subscriber().unwrap();
+        let publisher = event.publisher().unwrap();
+        let subscriber = event.subscriber().unwrap();
 
         let sample = publisher.loan_with(42).unwrap();
         sample.publish().unwrap();
@@ -184,10 +182,7 @@ mod test {
 
     type Payload = MyData;
 
-    fn thread_proc_publish<'s, 't>(topic: impl Topic<'s, 't, HeapAdapter<'t>, Payload>)
-    where
-        't: 's,
-    {
+    fn thread_proc_publish(event: impl Event<HeapAdapter, Payload>) {
         let span = span!(Level::INFO, "thread_proc_publish");
         let _guard = span.enter();
 
@@ -195,7 +190,7 @@ mod test {
         thread::sleep(Duration::from_millis(1000));
 
         info!("sending sample");
-        let publisher = topic.publisher().unwrap();
+        let publisher = event.publisher().unwrap();
 
         for i in 0..4 {
             let sample = publisher.loan_with(Payload { a: 42, b: i }).unwrap();
@@ -203,17 +198,12 @@ mod test {
         }
     }
 
-    fn thread_proc_subscribe<'s, 't>(
-        topic: impl Topic<'s, 't, HeapAdapter<'t>, Payload>,
-    ) -> ComResult<u32>
-    where
-        't: 's,
-    {
+    fn thread_proc_subscribe(event: impl Event<HeapAdapter, Payload>) -> ComResult<u32> {
         let span = span!(Level::INFO, "thread_proc_subscribe");
         let _guard = span.enter();
 
         info!("start subscribe");
-        let subscriber = topic.subscriber().unwrap();
+        let subscriber = event.subscriber().unwrap();
 
         info!("waiting for samples");
         let mut sum = 0;
@@ -231,17 +221,17 @@ mod test {
         static ADAPTER: std::sync::LazyLock<HeapAdapter> =
             std::sync::LazyLock::new(|| HeapAdapter::new());
 
-        let topic = ADAPTER
-            .topic::<Payload>(Label::INVALID)
+        let event = ADAPTER
+            .event::<Payload>(Label::INVALID)
             .with_queue_depth(4)
             .build()
             .unwrap();
 
-        let topic_clone = topic.clone();
-        let handle_publisher = std::thread::spawn(move || thread_proc_publish(topic_clone));
+        let event_clone = event.clone();
+        let handle_publisher = std::thread::spawn(move || thread_proc_publish(event_clone));
 
-        let topic_clone = topic.clone();
-        let handle_subscriber = std::thread::spawn(move || thread_proc_subscribe(topic_clone));
+        let event_clone = event.clone();
+        let handle_subscriber = std::thread::spawn(move || thread_proc_subscribe(event_clone));
 
         // wait for both threads
         handle_publisher.join().unwrap();

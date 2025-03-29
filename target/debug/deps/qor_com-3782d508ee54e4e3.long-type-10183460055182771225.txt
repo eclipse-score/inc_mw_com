@@ -1,0 +1,1 @@
+impl Future<Output = Result<<HeapPendingRequest<Args, R> as base::remote_procedure::PendingRequest<localheap::HeapAdapter, Args, R>>::Response, base::ComError>>
