@@ -8,6 +8,7 @@
 use super::Local;
 
 use crate::base::*;
+use crate::base::signal::{ Emitter, Listener };
 
 use std::{
     fmt::Debug, sync::{Arc, Condvar, Mutex}, time::Duration

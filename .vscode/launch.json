@@ -97,5 +97,41 @@
             "args": [],
             "cwd": "${workspaceFolder}"
         },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'qor_com::signal_dynamic'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=signal_dynamic",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "signal_dynamic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'qor_com::event_dynamic'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=event_dynamic",
+                    "--package=qor-com"
+                ],
+                "filter": {
+                    "name": "event_dynamic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
     ]
 }

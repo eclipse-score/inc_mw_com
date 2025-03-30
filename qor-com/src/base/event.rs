@@ -82,17 +82,6 @@ where
     ///
     /// The caller has to make sure to initialize the data in the buffer before calling this method.
     unsafe fn assume_init(self) -> Self::SampleMut;
-
-    /// Render the buffer initialized for immutable access.
-    ///
-    /// This corresponds to `MaybeUninit::assume_init_read`.
-    ///
-    /// # Safety
-    ///
-    /// The caller has to make sure to initialize the data in the buffer before calling this method.
-    unsafe fn assume_init_read(
-        self,
-    ) -> <<Self as SampleMaybeUninit<A, T>>::SampleMut as SampleMut<A, T>>::Sample;
 }
 
 /// The `Publisher` represents a publisher to a event.

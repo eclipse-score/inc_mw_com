@@ -6,28 +6,38 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#[allow(unused_imports)]
 use qor_com::prelude::*;
+
+#[allow(unused_imports)]
 use qor_core::prelude::*;
 
 use core::time::Duration;
+#[allow(unused_imports)]
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar};
 
+#[allow(dead_code)]
 const CYCLE_TIME: Duration = Duration::from_millis(100);
 
 #[derive(Debug)]
+#[cfg(feature = "events_supported")]
 struct Payload {
     value: u32,
     arr: [u32; 8],
 }
 
+#[cfg(feature = "events_supported")]
 impl TypeTag for Payload {
     const TYPE_TAG: Tag = Tag::new(*b"_Payload");
 }
 
+#[cfg(feature = "events_supported")]
 impl Coherent for Payload {}
 
+#[cfg(feature = "events_supported")]
 unsafe impl Reloc for Payload {}
 
+#[cfg(feature = "events_supported")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let adapter = adapter::local::Local::new();
     let stop_signal = Arc::new((AtomicBool::new(false), Condvar::new()));
@@ -104,4 +114,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Threads joined");
 
     Ok(())
+}
+
+#[cfg(not (feature = "events_supported"))]
+fn main() {
+    println!("This example requires the `signals_supported` feature to be enabled")
 }

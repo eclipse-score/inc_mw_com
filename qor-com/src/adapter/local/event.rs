@@ -7,8 +7,12 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::Local;
 
-use crate::base::*;
 use qor_core::prelude::*;
+
+use crate::base::event::{
+    Event, EventBuilder, Publisher, Sample, SampleMaybeUninit, SampleMut, Subscriber,
+};
+use crate::base::*;
 
 use std::{
     collections::VecDeque,
@@ -141,15 +145,6 @@ where
     }
 
     unsafe fn assume_init(self) -> Self::SampleMut {
-        LocalSample {
-            queue: self.queue.clone(),
-            value: Box::from_raw(Box::into_raw(self.value.assume_init())),
-        }
-    }
-
-    unsafe fn assume_init_read(
-        self,
-    ) -> <<Self as SampleMaybeUninit<Local, T>>::SampleMut as SampleMut<Local, T>>::Sample {
         LocalSample {
             queue: self.queue.clone(),
             value: Box::from_raw(Box::into_raw(self.value.assume_init())),

@@ -323,9 +323,13 @@ pub mod prelude {
     pub use crate::base::*;
 
     pub use crate::adapter;
+
+    #[cfg(feature = "dynamic_adapter")]
+    pub use crate::adapter::dynamic::*;
 }
 
+/// Basic definitions and traits of communication
 pub mod base;
 
-
+/// Default transport adapter implementations
 pub mod adapter;

@@ -63,8 +63,8 @@
 
 use qor_core::prelude::*;
 
-use std::fmt::Debug;
 use std::error::Error;
+use std::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ComError {
@@ -77,14 +77,12 @@ pub enum ComError {
 }
 
 impl std::fmt::Display for ComError {
-    
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Com: {:?}", self)
     }
 }
 
-impl Error for ComError {
-}
+impl Error for ComError {}
 
 /// Communication module result type
 pub type ComResult<T> = std::result::Result<T, ComError>;
@@ -111,20 +109,36 @@ pub trait ReturnValue: Debug + Send + TypeTag + Coherent + Reloc {}
 // Information elements
 //
 
+#[cfg(feature = "signals_supported")]
 pub mod signal;
-pub use signal::*;
+#[cfg(feature = "signals_supported")]
+pub use signal::{Emitter, Listener, Signal, SignalBuilder};
 
+#[cfg(feature = "variables_supported")]
 pub mod variable;
-pub use variable::*;
+#[cfg(feature = "variables_supported")]
+pub use variable::{Getter, Setter, Variable, VariableBuilder};
 
+#[cfg(feature = "events_supported")]
 pub mod event;
-pub use event::*;
+#[cfg(feature = "events_supported")]
+pub use event::{Event, EventBuilder, Publisher, Sample, SampleMaybeUninit, SampleMut, Subscriber};
 
+#[cfg(feature = "fire_and_forget_supported")]
 pub mod fire_and_forget;
-pub use fire_and_forget::*;
+#[cfg(feature = "fire_and_forget_supported")]
+pub use fire_and_forget::{
+    FireAndForget, FireAndForgetBuilder, Notification, NotificationMaybeUninit, NotificationMut,
+    Notifier, Receiver,
+};
 
+#[cfg(feature = "rpcs_supported")]
 pub mod remote_procedure;
-pub use remote_procedure::*;
+#[cfg(feature = "rpcs_supported")]
+pub use remote_procedure::{
+    Invokee, Invoker, RemoteProcedure, RemoteProcedureBuilder, Request, RequestMaybeUninit,
+    RequestMut, Response, ResponseMaybeUninit, ResponseMut,
+};
 
 ////////////////////////////////////////////////////////////////
 //
@@ -151,7 +165,7 @@ pub trait Adapter: Debug {
     type StaticConfig: StaticConfig<Self>;
 
     /// Get the static configuration of the adapter.
-    fn static_config<'a>(&self) -> &'a Self::StaticConfig;
+    fn static_config(&self) -> &'static Self::StaticConfig;
 }
 
 /// A transport adapter connects to a memory provision framework.
@@ -164,33 +178,39 @@ pub trait Adapter: Debug {
 ///
 pub trait TransportAdapter: Adapter {
     /// The builder used for Signals
+    #[cfg(feature = "signals_supported")]
     type SignalBuilder: SignalBuilder<Self>;
 
     /// The builder used for Variables
-    // type VariableBuilder<T>: VariableBuilder<Self, T>
-    // where
-    //     T: TypeTag + Coherent + Reloc + Send + Debug;
+    #[cfg(feature = "variables_supported")]
+    type VariableBuilder<T>: VariableBuilder<Self, T>
+    where
+        T: TypeTag + Coherent + Reloc + Send + Debug;
 
     /// The builder used for Events
+    #[cfg(feature = "events_supported")]
     type EventBuilder<T>: EventBuilder<Self, T>
     where
         T: TypeTag + Coherent + Reloc + Send + Debug;
 
     /// The builder used for FireAndForget
-    // type FireAndForgetBuilder<Args>: FireAndForgetBuilder<Self, Args>
-    // where
-    //     Args: ParameterPack;
+    #[cfg(feature = "fire_and_forget_supported")]
+    type FireAndForgetBuilder<Args>: FireAndForgetBuilder<Self, Args>
+    where
+        Args: ParameterPack;
 
     /// The builder used for Remote Procedures
-    // type RemoteProcedureBuilder<Args, R>: RemoteProcedureBuilder<Self, Args, R>
-    // where
-    //     Args: ParameterPack,
-    //     R: ReturnValue;
+    #[cfg(feature = "rpcs_supported")]
+    type RemoteProcedureBuilder<Args, R>: RemoteProcedureBuilder<Self, Args, R>
+    where
+        Args: ParameterPack,
+        R: ReturnValue;
 
     /// Get an signal builder.
     ///
     /// signals signal the occurrence of a state change.
     /// They issue notifiers to emit the signal and listeners to wait for the signal.
+    #[cfg(feature = "signals_supported")]
     fn signal(&self, label: Label) -> Self::SignalBuilder;
 
     /// Get a variable builder for the given type.
@@ -202,18 +222,31 @@ pub trait TransportAdapter: Adapter {
     ///
     /// Events are information elements transporting values of a given type.
     /// They issue publishers that publish new values and subscribers that receive the values.
+    #[cfg(feature = "events_supported")]
     fn event<T>(&self, label: Label) -> Self::EventBuilder<T>
     where
         T: TypeTag + Coherent + Reloc + Send + Debug;
 
-    // Get a fire-and-forget builder for the given argument types.
-    // fn fire_and_forget<Args>(&self, label: Label) -> Self::FireAndForgetBuilder<Args>
-    // where
-    //     Args: ParameterPack;
+    /// Get a fire-and-forget builder for the given argument types.
+    #[cfg(feature = "fire_and_forget_supported")]
+    fn fire_and_forget<Args>(&self, label: Label) -> Self::FireAndForgetBuilder<Args>
+    where
+        Args: ParameterPack;
 
-    // Get a remote procedure builder for the given argument and result types.
-    // fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
-    // where
-    //     Args: ParameterPack,
-    //     R: ReturnValue;
+    /// Get a remote procedure builder for the given argument and result types.
+    #[cfg(feature = "rpcs_supported")]
+    fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
+    where
+        Args: ParameterPack,
+        R: ReturnValue;
+}
+
+/// The IntoDynamic trait is used for adapters that have support in the `Dynamic` adapter.
+#[cfg(feature = "dynamic_adapter")]
+pub trait IntoDynamic<T>
+where
+    T: TransportAdapter,
+{
+    /// Convert the adapter into a dynamic adapter.
+    fn into_dynamic(self) -> super::adapter::dynamic::Dynamic;
 }

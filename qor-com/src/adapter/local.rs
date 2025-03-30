@@ -11,14 +11,23 @@ use qor_core::prelude::*;
 
 use std::fmt::Debug;
 
+#[cfg(feature = "signals_supported")]
 mod signal;
+#[cfg(feature = "signals_supported")]
 pub use signal::*;
 
+#[cfg(feature = "events_supported")]
 mod event;
+#[cfg(feature = "events_supported")]
 pub use event::*;
 
-// mod remote_procedure;
-// pub use remote_procedure::*;
+#[cfg(feature = "rpcs_supported")]
+mod remote_procedure;
+#[cfg(feature = "rpcs_supported")]
+pub use remote_procedure::*;
+
+#[cfg(feature = "dynamic_adapter")]
+use super::dynamic::{Dynamic, DynamicNew};
 
 //
 // The TransportAdapter implementation
@@ -59,29 +68,36 @@ impl Local {
 impl Adapter for Local {
     type StaticConfig = LocalStaticConfig;
 
-    fn static_config<'a>(&self) -> &'a Self::StaticConfig {
+    fn static_config(&self) -> &'static Self::StaticConfig {
         &Self::CONFIG
     }
 }
 
 impl TransportAdapter for Local {
+    #[cfg(feature = "signals_supported")]
     type SignalBuilder = LocalSignalBuilder;
+
+    #[cfg(feature = "events_supported")]
     type EventBuilder<T>
         = LocalEventBuilder<T>
     where
         T: Debug + Send + TypeTag + Coherent + Reloc;
-    // type RemoteProcedureBuilder<Args, R>
-    //     = LocalRemoteProcedureBuilder<Args, R>
-    // where
-    //     Args: ParameterPack,
-    //     R: ReturnValue;
+
+    #[cfg(feature = "rpcs_supported")]
+    type RemoteProcedureBuilder<Args, R>
+        = LocalRemoteProcedureBuilder<Args, R>
+    where
+        Args: ParameterPack,
+        R: ReturnValue;
 
     /// Create a new event on the local heap
+    #[cfg(feature = "signals_supported")]
     fn signal(&self, _label: Label) -> Self::SignalBuilder {
         LocalSignalBuilder::new()
     }
 
     /// Create a new topic on the local heap
+    #[cfg(feature = "events_supported")]
     fn event<T>(&self, _label: Label) -> Self::EventBuilder<T>
     where
         T: TypeTag + Coherent + Reloc + Send + Debug,
@@ -89,14 +105,22 @@ impl TransportAdapter for Local {
         LocalEventBuilder::new()
     }
 
-    // Create a new remote_procedure_call on the local heap
-    // fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
-    // where
-    //     Args: ParameterPack,
-    //     R: ReturnValue,
-    // {
-    //     LocalRemoteProcedureBuilder::new(label)
-    // }
+    /// Create a new remote_procedure_call on the local heap
+    #[cfg(feature = "rpcs_supported")]
+    fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
+    where
+        Args: ParameterPack,
+        R: ReturnValue,
+    {
+        LocalRemoteProcedureBuilder::new(label)
+    }
+}
+
+#[cfg(feature = "dynamic_adapter")]
+impl IntoDynamic<Local> for Local {
+    fn into_dynamic(self) -> Dynamic {
+        Dynamic::new(self)
+    }
 }
 
 #[cfg(test)]
@@ -112,43 +136,44 @@ mod test {
     }
 
     #[test]
-    fn test_heap_signal_threading() {
+    #[cfg(feature = "signals_supported")]
+    fn test_local_signal_threading() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
-        static ADAPTER: std::sync::LazyLock<Local> =
-            std::sync::LazyLock::new(|| Local::new());
+        static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
 
         let signal = ADAPTER.signal(Label::INVALID).build().unwrap();
 
         let emitter = signal.emitter().unwrap();
         let handle_notifier = std::thread::spawn(move || {
-            let span = span!(Level::INFO, "thread_proc_notify");
+            let span = span!(Level::INFO, "[Local] thread_proc_notify");
             let _guard = span.enter();
 
-            info!("start notify");
+            info!("[Local] start notify");
             thread::sleep(Duration::from_millis(1000));
-            info!("emitting notification");
+            info!("[Local] emitting notification");
             emitter.emit();
         });
 
         let listener = signal.listener().unwrap();
         let handle_listener = std::thread::spawn(move || {
-            let span = span!(Level::INFO, "thread_proc_listen");
+            let span = span!(Level::INFO, "[Local] thread_proc_listen");
             let _guard = span.enter();
 
-            info!("start listen");
+            info!("[Local] start listen");
             let result = listener.wait().unwrap();
-            info!("received notification");
+            info!("[Local] received notification");
             assert_eq!(result, true);
         });
 
         // wait for both threads
         handle_notifier.join().unwrap();
         handle_listener.join().unwrap();
-        info!("event threads joined");
+        info!("[Local] event threads joined");
     }
 
     #[test]
-    fn test_heap_event() {
+    #[cfg(feature = "events_supported")]
+    fn test_local_event() {
         let adapter = Local::new();
         let event = adapter
             .event::<u32>(Label::INVALID)
@@ -169,27 +194,33 @@ mod test {
     }
 
     #[derive(Debug)]
+    #[cfg(feature = "events_supported")]
     struct MyData {
         _a: u32,
         b: u32,
     }
 
+    #[cfg(feature = "events_supported")]
     impl TypeTag for MyData {
         const TYPE_TAG: Tag = Tag::new(*b"MyData__");
     }
+    #[cfg(feature = "events_supported")]
     impl Coherent for MyData {}
+    #[cfg(feature = "events_supported")]
     unsafe impl Reloc for MyData {}
 
+    #[cfg(feature = "events_supported")]
     type Payload = MyData;
 
+    #[cfg(feature = "events_supported")]
     fn thread_proc_publish(event: impl Event<Local, Payload>) {
-        let span = span!(Level::INFO, "thread_proc_publish");
+        let span = span!(Level::INFO, "[Local] thread_proc_publish");
         let _guard = span.enter();
 
-        info!("start publish");
+        info!("[Local] start publish");
         thread::sleep(Duration::from_millis(1000));
 
-        info!("sending sample");
+        info!("[Local] sending sample");
         let publisher = event.publisher().unwrap();
 
         for i in 0..4 {
@@ -198,28 +229,29 @@ mod test {
         }
     }
 
+    #[cfg(feature = "events_supported")]
     fn thread_proc_subscribe(event: impl Event<Local, Payload>) -> ComResult<u32> {
-        let span = span!(Level::INFO, "thread_proc_subscribe");
+        let span = span!(Level::INFO, "[Local] thread_proc_subscribe");
         let _guard = span.enter();
 
-        info!("start subscribe");
+        info!("[Local] start subscribe");
         let subscriber = event.subscriber().unwrap();
 
-        info!("waiting for samples");
+        info!("[Local] waiting for samples");
         let mut sum = 0;
         for _ in 0..4 {
             let sample = subscriber.receive().unwrap();
-            info!("received sample {:?}", *sample);
+            info!("[Local] received sample {:?}", *sample);
             sum += sample.b;
         }
         Ok(sum)
     }
 
     #[test]
-    fn test_heap_topic_threading() {
+    #[cfg(feature = "events_supported")]
+    fn test_local_event_threading() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
-        static ADAPTER: std::sync::LazyLock<Local> =
-            std::sync::LazyLock::new(|| Local::new());
+        static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
 
         let event = ADAPTER
             .event::<Payload>(Label::INVALID)
@@ -236,7 +268,7 @@ mod test {
         // wait for both threads
         handle_publisher.join().unwrap();
         let result = handle_subscriber.join().unwrap();
-        info!("topic threads joined");
+        info!("[Local] topic threads joined");
 
         assert_eq!(result.is_ok(), true);
         let result = result.unwrap();

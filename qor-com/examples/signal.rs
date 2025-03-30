@@ -6,6 +6,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+
 use qor_core::prelude::*;
 use qor_com::prelude::*;
 
@@ -14,6 +15,7 @@ use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar};
 
 const CYCLE_TIME: Duration = Duration::from_secs(1);
 
+#[cfg(feature = "signals_supported")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let adapter = adapter::local::Local::new();
     let stop_signal = Arc::new((AtomicBool::new(false), Condvar::new()));
@@ -75,4 +77,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Threads joined");
 
     Ok(())
+}
+
+#[cfg(not (feature = "signals_supported"))]
+fn main() {
+    println!("This example requires the `signals_supported` feature to be enabled")
 }

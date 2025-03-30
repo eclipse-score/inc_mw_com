@@ -6,7 +6,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-
+/// The local in-process transport adapter
 pub mod local;
 
-//pub mod dynamic;
+#[cfg(feature = "dynamic_adapter")]
+pub mod dynamic;
