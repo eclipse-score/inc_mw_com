@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
 
-            // wait for the event
+            // wait for a sample
             match subscriber.receive_timeout(10 * CYCLE_TIME) {
                 Ok(sample) => {
                     println!(
@@ -95,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 fibo_mod[i] = (fibo_mod[(i + 6) % 8] + fibo_mod[(i + 7) % 8]) % 65536;
             }
 
-            // emit the signal
+            // publish the payload
             publisher.publish(payload).unwrap();
             println!("Publish:   payload published");
 
@@ -116,7 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(not (feature = "events_supported"))]
+#[cfg(not(feature = "events_supported"))]
 fn main() {
     println!("This example requires the `signals_supported` feature to be enabled")
 }

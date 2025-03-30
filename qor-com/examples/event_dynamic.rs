@@ -68,7 +68,7 @@ fn publisher_thread(
             fibo_mod[i] = (fibo_mod[(i + 6) % 8] + fibo_mod[(i + 7) % 8]) % 65536;
         }
 
-        // emit the signal
+        // publish the payload
         publisher.publish(payload).unwrap();
         println!("Publish:   payload published");
 
@@ -90,7 +90,7 @@ fn subscriber_thread(
             break;
         }
 
-        // wait for the event
+        // wait for a sample
         match subscriber.receive_timeout(10 * CYCLE_TIME) {
             Ok(sample) => {
                 println!(
