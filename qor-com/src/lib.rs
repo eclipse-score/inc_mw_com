@@ -321,9 +321,11 @@
 /// The prelude module contains the core functionality of the qor-com library.
 pub mod prelude {
     pub use crate::base::*;
+
+    pub use crate::adapter::heap::HeapAdapter;
 }
 
 pub mod base;
 
 
-mod adapter;
+pub mod adapter;

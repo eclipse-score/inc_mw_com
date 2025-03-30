@@ -70,7 +70,7 @@ where
     type Listener: Listener<A>;
 
     /// Get a emit for this signal
-    fn emit(&self) -> ComResult<Self::Emitter>;
+    fn emitter(&self) -> ComResult<Self::Emitter>;
 
     /// Get a listener for this signal
     fn listener(&self) -> ComResult<Self::Listener>;

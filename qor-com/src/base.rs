@@ -64,6 +64,7 @@
 use qor_core::prelude::*;
 
 use std::fmt::Debug;
+use std::error::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ComError {
@@ -73,6 +74,16 @@ pub enum ComError {
     QueueFull,
     FanError,
     StateError,
+}
+
+impl std::fmt::Display for ComError {
+    
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Com: {:?}", self)
+    }
+}
+
+impl Error for ComError {
 }
 
 /// Communication module result type
@@ -171,10 +182,10 @@ pub trait TransportAdapter: Adapter {
     //     Args: ParameterPack;
 
     /// The builder used for Remote Procedures
-    type RemoteProcedureBuilder<Args, R>: RemoteProcedureBuilder<Self, Args, R>
-    where
-        Args: ParameterPack,
-        R: ReturnValue;
+    // type RemoteProcedureBuilder<Args, R>: RemoteProcedureBuilder<Self, Args, R>
+    // where
+    //     Args: ParameterPack,
+    //     R: ReturnValue;
 
     /// Get an signal builder.
     ///
@@ -195,14 +206,14 @@ pub trait TransportAdapter: Adapter {
     where
         T: TypeTag + Coherent + Reloc + Send + Debug;
 
-    /// Get a fire-and-forget builder for the given argument types.
+    // Get a fire-and-forget builder for the given argument types.
     // fn fire_and_forget<Args>(&self, label: Label) -> Self::FireAndForgetBuilder<Args>
     // where
     //     Args: ParameterPack;
 
-    /// Get a remote procedure builder for the given argument and result types.
-    fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
-    where
-        Args: ParameterPack,
-        R: ReturnValue;
+    // Get a remote procedure builder for the given argument and result types.
+    // fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
+    // where
+    //     Args: ParameterPack,
+    //     R: ReturnValue;
 }

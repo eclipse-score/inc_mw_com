@@ -64,15 +64,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug example 'listener'",
+            "name": "Debug example 'qor_com::signal'",
             "cargo": {
                 "args": [
                     "build",
-                    "--example=listener",
+                    "--example=signal",
                     "--package=qor-com"
                 ],
                 "filter": {
-                    "name": "listener",
+                    "name": "signal",
                     "kind": "example"
                 }
             },
@@ -82,58 +82,20 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in example 'listener'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--example=listener",
-                    "--package=qor-com"
-                ],
-                "filter": {
-                    "name": "listener",
-                    "kind": "example"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug example 'notifier'",
+            "name": "Debug example 'qor_com::event'",
             "cargo": {
                 "args": [
                     "build",
-                    "--example=notifier",
+                    "--example=event",
                     "--package=qor-com"
                 ],
                 "filter": {
-                    "name": "notifier",
+                    "name": "event",
                     "kind": "example"
                 }
             },
             "args": [],
             "cwd": "${workspaceFolder}"
         },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in example 'notifier'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--example=notifier",
-                    "--package=qor-com"
-                ],
-                "filter": {
-                    "name": "notifier",
-                    "kind": "example"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        }
     ]
 }
