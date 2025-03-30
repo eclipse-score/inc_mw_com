@@ -1,1 +1,0 @@
-<<<impl Event<HeapAdapter, Payload> as base::event::Event<localheap::HeapAdapter, MyData>>::Publisher as base::event::Publisher<localheap::HeapAdapter, MyData>>::SampleMaybeUninit as base::event::SampleMaybeUninit<localheap::HeapAdapter, MyData>>::SampleMut
