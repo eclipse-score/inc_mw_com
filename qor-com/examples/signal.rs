@@ -15,7 +15,7 @@ use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar};
 const CYCLE_TIME: Duration = Duration::from_secs(1);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let adapter = HeapAdapter::new();
+    let adapter = adapter::local::Local::new();
     let stop_signal = Arc::new((AtomicBool::new(false), Condvar::new()));
 
     // our signal

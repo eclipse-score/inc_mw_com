@@ -322,7 +322,7 @@
 pub mod prelude {
     pub use crate::base::*;
 
-    pub use crate::adapter::heap::HeapAdapter;
+    pub use crate::adapter;
 }
 
 pub mod base;
