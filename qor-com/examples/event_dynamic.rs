@@ -23,20 +23,24 @@ use std::{
 const CYCLE_TIME: Duration = Duration::from_millis(100);
 
 #[derive(Debug)]
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "events_supported")]
 struct Payload {
     value: u32,
     arr: [u32; 8],
 }
 
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "events_supported")]
 impl TypeTag for Payload {
     const TYPE_TAG: Tag = Tag::new(*b"_Payload");
 }
 
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "events_supported")]
 impl Coherent for Payload {}
 
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "events_supported")]
 unsafe impl Reloc for Payload {}
 
