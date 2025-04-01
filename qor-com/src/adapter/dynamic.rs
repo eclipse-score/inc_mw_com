@@ -188,7 +188,7 @@ mod test {
             emitter.emit();
         });
 
-        let listener = signal.listener().unwrap();
+        let listener = signal.collector().unwrap();
         let handle_listener = std::thread::spawn(move || {
             let span = span!(Level::INFO, "[Dynamic] thread_proc_listen");
             let _guard = span.enter();

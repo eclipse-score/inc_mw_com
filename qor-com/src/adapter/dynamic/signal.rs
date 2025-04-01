@@ -6,7 +6,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
-use crate::base::signal::{ Emitter, Listener };
+use crate::base::signal::{ Emitter, Collector };
 
 use std::time::Duration;
 
@@ -18,7 +18,7 @@ mod local {
     pub(crate) type Builder = <Adapter as crate::base::TransportAdapter>::SignalBuilder;
     pub(crate) type Signal = <Builder as crate::base::SignalBuilder<Adapter>>::Signal;
     pub(crate) type Emitter = <Signal as crate::base::Signal<Adapter>>::Emitter;
-    pub(crate) type Listener = <Signal as crate::base::Signal<Adapter>>::Listener;
+    pub(crate) type Listener = <Signal as crate::base::Signal<Adapter>>::Collector;
 }
 
 #[derive(Debug)]
@@ -45,16 +45,16 @@ enum EmitterSelector {
 }
 
 #[derive(Debug)]
-enum ListenerSelector {
+enum CollectorSelector {
     Local(local::Listener),
 }
 
 #[derive(Debug)]
-pub struct DynamicSignalEmitter {
+pub struct DynamicEmitter {
     inner: EmitterSelector,
 }
 
-impl Emitter<Dynamic> for DynamicSignalEmitter {
+impl Emitter<Dynamic> for DynamicEmitter {
     // Notify the event by setting the flag and waking up all listeners
     fn emit(&self) {
         match &self.inner {
@@ -64,46 +64,46 @@ impl Emitter<Dynamic> for DynamicSignalEmitter {
 }
 
 #[derive(Debug)]
-pub struct DynamicSignalListener {
-    inner: ListenerSelector,
+pub struct DynamicCollector {
+    inner: CollectorSelector,
 }
 
-impl Listener<Dynamic> for DynamicSignalListener {
+impl Collector<Dynamic> for DynamicCollector {
     #[inline(always)]
     fn check(&self) -> ComResult<bool> {
         match &self.inner {
-            ListenerSelector::Local(inner) => inner.check(),
+            CollectorSelector::Local(inner) => inner.check(),
         }
     }
 
     #[inline(always)]
     fn check_and_reset(&self) -> ComResult<bool> {
         match &self.inner {
-            ListenerSelector::Local(inner) => inner.check_and_reset(),
+            CollectorSelector::Local(inner) => inner.check_and_reset(),
         }
     }
 
     fn wait(&self) -> ComResult<bool> {
         match &self.inner {
-            ListenerSelector::Local(inner) => inner.wait(),
+            CollectorSelector::Local(inner) => inner.wait(),
         }
     }
 
     fn wait_timeout(&self, timeout: std::time::Duration) -> ComResult<bool> {
         match &self.inner {
-            ListenerSelector::Local(inner) => inner.wait_timeout(timeout),
+            CollectorSelector::Local(inner) => inner.wait_timeout(timeout),
         }
     }
 
     async fn wait_async(&self) -> ComResult<bool> {
         match &self.inner {
-            ListenerSelector::Local(inner) => inner.wait_async().await,
+            CollectorSelector::Local(inner) => inner.wait_async().await,
         }
     }
 
     async fn wait_timeout_async(&self, timeout: Duration) -> ComResult<bool> {
         match &self.inner {
-            ListenerSelector::Local(inner) => inner.wait_timeout_async(timeout).await,
+            CollectorSelector::Local(inner) => inner.wait_timeout_async(timeout).await,
         }
     }
 }
@@ -122,26 +122,26 @@ impl Clone for DynamicSignal {
 }
 
 impl Signal<Dynamic> for DynamicSignal {
-    type Emitter = DynamicSignalEmitter;
-    type Listener = DynamicSignalListener;
+    type Emitter = DynamicEmitter;
+    type Collector = DynamicCollector;
 
     fn emitter(&self) -> ComResult<Self::Emitter> {
         match &self.inner {
             SignalSelector::Local(inner) => {
                 let emitter = inner.emitter()?;
-                Ok(DynamicSignalEmitter {
+                Ok(DynamicEmitter {
                     inner: EmitterSelector::Local(emitter),
                 })
             }
         }
     }
 
-    fn listener(&self) -> ComResult<Self::Listener> {
+    fn collector(&self) -> ComResult<Self::Collector> {
         match &self.inner {
             SignalSelector::Local(inner) => {
-                let listener = inner.listener()?;
-                Ok(DynamicSignalListener {
-                    inner: ListenerSelector::Local(listener),
+                let listener = inner.collector()?;
+                Ok(DynamicCollector {
+                    inner: CollectorSelector::Local(listener),
                 })
             }
         }

@@ -6,11 +6,18 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use super::LocalAdapter;
+use qor_core::prelude::*;
+use super::Local;
 
+use crate::base::remote_procedure::{
+    Invoked, Invoker, PendingRequest, Rpc, RpcBuilder, Request,
+    RequestMaybeUninit, RequestMut, Response, ResponseMaybeUninit, ResponseMut,
+};
 use crate::base::*;
 
 use std::cell::UnsafeCell;
+use std::collections::VecDeque;
+use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -19,12 +26,17 @@ use std::sync::Mutex;
 use std::{fmt::Debug, sync::Arc};
 
 //
-// RemoteProcedure
+// Rpc
 //
+
+type PendingQueue<Args, R> = Arc<(
+    Mutex<VecDeque<Arc<UnsafeCell<LocalRequestState<Args, R>>>>>,
+    Condvar,
+)>;
 
 /// The inner structure of a remote procedure request and response
 #[derive(Debug)]
-struct LocalPendingRequestInner<Args, R>
+struct LocalRequestState<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
@@ -41,36 +53,36 @@ where
     /// SAFETY: The result is initialized as soon as this inner is no longer owned by `LocalResponseMaybeUninit`
     /// SAFETY: A Deref or DerefMut on the result is only possible when it is initialized.
     result: MaybeUninit<R>,
-    result_control: (Mutex<bool>, Condvar),
+    result_control: (Mutex<(bool, bool)>, Condvar),
 }
 
-unsafe impl<Args, R> Send for LocalPendingRequestInner<Args, R>
+unsafe impl<Args, R> Send for LocalRequestState<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
 {
 }
 
-unsafe impl<Args, R> Sync for LocalPendingRequestInner<Args, R>
+unsafe impl<Args, R> Sync for LocalRequestState<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
 {
 }
 
-impl<Args, R> LocalPendingRequestInner<Args, R>
+impl<Args, R> LocalRequestState<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
 {
     /// Create a new `LocalPendingRequestInner` with the given arguments and result.
-    pub(crate) fn new() -> Self {
+    fn new() -> Self {
         Self {
             args: MaybeUninit::uninit(),
             args_control: (Mutex::new(false), Condvar::new()),
 
             result: MaybeUninit::uninit(),
-            result_control: (Mutex::new(false), Condvar::new()),
+            result_control: (Mutex::new((false, false)), Condvar::new()),
         }
     }
 }
@@ -81,7 +93,8 @@ where
     Args: ParameterPack,
     R: ReturnValue,
 {
-    inner: Arc<UnsafeCell<LocalPendingRequestInner<Args, R>>>,
+    queue: PendingQueue<Args, R>,
+    state: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
 }
 
 impl<Args, R> LocalRequestMaybeUninit<Args, R>
@@ -90,14 +103,15 @@ where
     R: ReturnValue,
 {
     /// Create a new `LocalRequestMaybeUninit` with the given arguments.
-    pub(crate) fn new() -> Self {
+    fn new(queue: PendingQueue<Args, R>) -> Self {
         Self {
-            inner: Arc::new(UnsafeCell::new(LocalPendingRequestInner::new())),
+            queue,
+            state: Arc::new(UnsafeCell::new(LocalRequestState::new())),
         }
     }
 }
 
-impl<Args, R> RequestMaybeUninit<LocalAdapter, Args, R> for LocalRequestMaybeUninit<Args, R>
+impl<Args, R> RequestMaybeUninit<Local, Args, R> for LocalRequestMaybeUninit<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
@@ -107,18 +121,21 @@ where
     fn write(self, args: Args) -> Self::RequestMut {
         // SAFETY: The `args` is initialized and the `LocalRequestMut` is created.
         unsafe {
-            let inner = &mut *self.inner.get();
+            let inner = &mut *self.state.get();
             inner.args = MaybeUninit::new(args);
             self.assume_init()
         }
     }
 
     fn as_mut_ptr(&mut self) -> *mut Args {
-        self.inner.get() as *mut Args
+        self.state.get() as *mut Args
     }
 
     unsafe fn assume_init(self) -> Self::RequestMut {
-        Self::RequestMut { inner: self.inner }
+        Self::RequestMut {
+            queue: self.queue,
+            request: self.state,
+        }
     }
 }
 
@@ -128,7 +145,8 @@ where
     Args: ParameterPack,
     R: ReturnValue,
 {
-    inner: Arc<UnsafeCell<LocalPendingRequestInner<Args, R>>>,
+    queue: PendingQueue<Args, R>,
+    request: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
 }
 
 impl<Args, R> Deref for LocalRequestMut<Args, R>
@@ -142,8 +160,7 @@ where
         // SAFETY: Only the owner of the LocalRequestMut can call this. LocalRequestMut is not Send, so we have single thread guarantee
         unsafe {
             // get the inner structure
-            let inner = &mut *self.inner.get();
-            debug_assert!(*inner.args_control.0.lock().unwrap());
+            let inner = &mut *self.request.get();
 
             // SAFETY: The `args` are initialized inside LocalRequestMut
             &*(inner.args.as_ptr() as *const Args)
@@ -160,8 +177,7 @@ where
         // SAFETY: Only the owner of the LocalRequestMut can call this. LocalRequestMut is not Send, so we have single thread guarantee
         unsafe {
             // get the inner structure
-            let inner = &mut *self.inner.get();
-            debug_assert!(*inner.args_control.0.lock().unwrap());
+            let inner = &mut *self.request.get();
 
             // SAFETY: The `args` are initialized inside LocalRequestMut
             &mut *(inner.args.as_ptr() as *const Args as *mut Args)
@@ -169,7 +185,7 @@ where
     }
 }
 
-impl<Args, R> RequestMut<LocalAdapter, Args, R> for LocalRequestMut<Args, R>
+impl<Args, R> RequestMut<Local, Args, R> for LocalRequestMut<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
@@ -177,21 +193,22 @@ where
     type PendingRequest = LocalPendingRequest<Args, R>;
 
     fn execute(self) -> ComResult<Self::PendingRequest> {
-        let inner = unsafe { &mut *self.inner.get() };
+        let inner = unsafe { &mut *self.request.get() };
+        debug_assert!(!inner.args.as_ptr().is_null()); // must never happen as we cannot get here without initialized args
 
-        // acquire lock
-        let mut lock = inner
-            .args_control
-            .0
-            .lock()
-            .map_err(|_| ComError::LockError)?;
+        // lock queue
+        let mut queue = self.queue.0.lock().map_err(|_| ComError::LockError)?;
 
-        // notify 
-        *lock = true;
-        inner.args_control.1.notify_one();
+        // push request to queue of pending requests
+        queue.push_back(self.request.clone());
+
+        // notify queue
+        self.queue.1.notify_all();
 
         // ok
-        Ok(LocalPendingRequest { inner: self.inner })
+        Ok(LocalPendingRequest {
+            inner: self.request,
+        })
     }
 }
 
@@ -201,7 +218,7 @@ where
     Args: ParameterPack,
     R: ReturnValue,
 {
-    inner: Arc<UnsafeCell<LocalPendingRequestInner<Args, R>>>,
+    inner: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
 }
 
 unsafe impl<Args, R> Send for LocalPendingRequest<Args, R>
@@ -217,7 +234,7 @@ where
 {
 }
 
-impl<Args, R> PendingRequest<LocalAdapter, Args, R> for LocalPendingRequest<Args, R>
+impl<Args, R> PendingRequest<Local, Args, R> for LocalPendingRequest<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
@@ -225,22 +242,32 @@ where
     type Response = LocalResponse<Args, R>;
 
     fn try_receive(&self) -> ComResult<Option<Self::Response>> {
+        // SAFETY: This will work as we checked _and_ hold the safety lock
         let inner = unsafe { &mut *self.inner.get() };
 
-        // acquire lock
-        let lock = inner
+        // acquire the inner lock
+        let mut lock = inner
             .result_control
             .0
             .lock()
             .map_err(|_| ComError::LockError)?;
 
-        if *lock {
-            // result is already set
+        // check on result
+        if (*lock).1 {
+            // we have already consumed the result
+            Err(ComError::ResponseConsumed)
+        } else if (*lock).0 {
+            // result is set but not consumed
+
+            // mark consumed
+            (*lock).1 = true;
+
+            // and return response
             return Ok(Some(LocalResponse {
-                inner: self.inner.clone(),
+                inner: self.inner.clone(), // SAFETY: cannot fail as we have a value for sure here
             }));
         } else {
-            // ...or not
+            // result is not yet set
             Ok(None)
         }
     }
@@ -255,20 +282,25 @@ where
             .lock()
             .map_err(|_| ComError::LockError)?;
 
-        // until we have a result
-        loop {
-            if *lock {
-                // ...which we have
-                return Ok(LocalResponse {
-                    inner: self.inner.clone(),
-                });
-            } else {
-                // ...or not: wait for Condvar
-                lock = inner
-                    .result_control
-                    .1
-                    .wait(lock)
-                    .map_err(|_| ComError::LockError)?;
+        if (*lock).1 {
+            // double call results in error
+            Err(ComError::ResponseConsumed)
+        } else {
+            // until we have a result
+            loop {
+                if (*lock).0 {
+                    // ...which we have
+                    return Ok(LocalResponse {
+                        inner: self.inner.clone(),
+                    });
+                } else {
+                    // ...or not: wait for Condvar
+                    lock = inner
+                        .result_control
+                        .1
+                        .wait(lock)
+                        .map_err(|_| ComError::LockError)?;
+                }
             }
         }
     }
@@ -283,27 +315,32 @@ where
             .lock()
             .map_err(|_| ComError::LockError)?;
 
-        // until we have a result
-        loop {
-            if *lock {
-                // ...which we have
-                return Ok(LocalResponse {
-                    inner: self.inner.clone(),
-                });
-            } else {
-                // ...or not: wait for Condvar with timeout
-                let (new_lock, tor) = inner
-                    .result_control
-                    .1
-                    .wait_timeout(lock, timeout)
-                    .map_err(|_| ComError::LockError)?;
-
-                // check if we have a result
-                if tor.timed_out() {
-                    return Err(ComError::Timeout);
+        if (*lock).1 {
+            // result already consumed
+            Err(ComError::ResponseConsumed)
+        } else {
+            // until we have a result
+            loop {
+                if (*lock).0 {
+                    // ...which we have
+                    return Ok(LocalResponse {
+                        inner: self.inner.clone(),
+                    });
                 } else {
-                    // looks good
-                    lock = new_lock;
+                    // ...or not: wait for Condvar with timeout
+                    let (new_lock, tor) = inner
+                        .result_control
+                        .1
+                        .wait_timeout(lock, timeout)
+                        .map_err(|_| ComError::LockError)?;
+
+                    // check if we have a result
+                    if tor.timed_out() {
+                        return Err(ComError::Timeout);
+                    } else {
+                        // looks good
+                        lock = new_lock;
+                    }
                 }
             }
         }
@@ -327,7 +364,7 @@ where
     Args: ParameterPack,
     R: ReturnValue,
 {
-    inner: Arc<UnsafeCell<LocalPendingRequestInner<Args, R>>>,
+    state: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
 }
 
 unsafe impl<Args, R> Send for LocalRequest<Args, R>
@@ -354,7 +391,7 @@ where
         // SAFETY: Only the owner of the LocalRequestMut can call this. LocalRequestMut is not Send, so we have single thread guarantee
         unsafe {
             // get the inner structure
-            let inner = &mut *self.inner.get();
+            let inner = &mut *self.state.get();
             debug_assert!(*inner.args_control.0.lock().unwrap());
 
             // SAFETY: The `args` are initialized inside LocalRequestMut
@@ -363,7 +400,7 @@ where
     }
 }
 
-impl<Args, R> Request<LocalAdapter, Args, R> for LocalRequest<Args, R>
+impl<Args, R> Request<Local, Args, R> for LocalRequest<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
@@ -372,7 +409,7 @@ where
 
     fn loan_response_uninit(&self) -> ComResult<Self::ResponseMaybeUninit> {
         Ok(LocalResponseMaybeUninit {
-            inner: self.inner.clone(),
+            inner: self.state.clone(),
         })
     }
 }
@@ -383,10 +420,10 @@ where
     Args: ParameterPack,
     R: ReturnValue,
 {
-    inner: Arc<UnsafeCell<LocalPendingRequestInner<Args, R>>>,
+    inner: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
 }
 
-impl<Args, R> ResponseMaybeUninit<LocalAdapter, Args, R> for LocalResponseMaybeUninit<Args, R>
+impl<Args, R> ResponseMaybeUninit<Local, Args, R> for LocalResponseMaybeUninit<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
@@ -417,7 +454,7 @@ where
     Args: ParameterPack,
     R: ReturnValue,
 {
-    inner: Arc<UnsafeCell<LocalPendingRequestInner<Args, R>>>,
+    inner: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
 }
 
 impl<Args, R> Deref for LocalResponseMut<Args, R>
@@ -432,9 +469,8 @@ where
         unsafe {
             // get the inner structure
             let inner = &mut *self.inner.get();
-            debug_assert!(*inner.result_control.0.lock().unwrap());
 
-            // SAFETY: The `args` are initialized inside LocalRequestMut
+            // SAFETY: The `result` is initialized inside LocalRequestMut
             &*(inner.result.as_ptr() as *const R)
         }
     }
@@ -449,15 +485,15 @@ where
         unsafe {
             // get the inner structure
             let inner = &mut *self.inner.get();
-            debug_assert!(*inner.result_control.0.lock().unwrap());
+            debug_assert!(!inner.result_control.0.lock().unwrap().0); // SAFETY: as `send` will later consume `self` here the result is not frozen yet
 
-            // SAFETY: The `args` are initialized inside LocalRequestMut
+            // SAFETY: The `result` is initialized inside LocalRequestMut
             &mut *(inner.result.as_ptr() as *const R as *mut R)
         }
     }
 }
 
-impl<Args, R> ResponseMut<LocalAdapter, Args, R> for LocalResponseMut<Args, R>
+impl<Args, R> ResponseMut<Local, Args, R> for LocalResponseMut<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
@@ -472,8 +508,10 @@ where
             .lock()
             .map_err(|_| ComError::LockError)?;
 
-        // notify
-        *lock = true;
+        // mark result as present and frozen
+        (*lock).0 = true;
+
+        // notify potential pending requests
         inner.result_control.1.notify_one();
         Ok(())
     }
@@ -485,7 +523,7 @@ where
     Args: ParameterPack,
     R: ReturnValue,
 {
-    inner: Arc<UnsafeCell<LocalPendingRequestInner<Args, R>>>,
+    inner: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
 }
 
 impl<Args, R> Deref for LocalResponse<Args, R>
@@ -496,11 +534,11 @@ where
     type Target = R;
 
     fn deref(&self) -> &Self::Target {
-         // SAFETY: Only the owner of the LocalRequestMut can call this. LocalResponseMut is not Send, so we have single thread guarantee
-         unsafe {
+        // SAFETY: Only the owner of the LocalResponse can call this. LocalResponse is not Send, so we have single thread guarantee
+        unsafe {
             // get the inner structure
             let inner = &mut *self.inner.get();
-            debug_assert!(*inner.result_control.0.lock().unwrap());
+            debug_assert!(inner.result_control.0.lock().unwrap().0);
 
             // SAFETY: The `args` are initialized inside LocalRequestMut
             &*(inner.result.as_ptr() as *const R)
@@ -508,22 +546,281 @@ where
     }
 }
 
-impl<Args, R> Response<LocalAdapter, Args, R> for LocalResponse<Args, R>
+impl<Args, R> Response<Local, Args, R> for LocalResponse<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
 {
 }
 
-
-// on with: LocalInvoker, LocalInvokee, LocalRemoteProcedure and LocalRemoteProcedureBuilder
-
-/// LocalInvoker
 #[derive(Debug)]
 pub struct LocalInvoker<Args, R>
 where
     Args: ParameterPack,
     R: ReturnValue,
 {
-    inner: Arc<UnsafeCell<LocalPendingRequestInner<Args, R>>>,
+    queue: PendingQueue<Args, R>,
+}
+
+unsafe impl<Args, R> Send for LocalInvoker<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+}
+
+unsafe impl<Args, R> Sync for LocalInvoker<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+}
+
+impl<Args, R> Invoker<Local, Args, R> for LocalInvoker<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    type RequestMaybeUninit = LocalRequestMaybeUninit<Args, R>;
+
+    fn loan_uninit(&self) -> ComResult<Self::RequestMaybeUninit> {
+        Ok(LocalRequestMaybeUninit::new(self.queue.clone()))
+    }
+
+    async fn invoke_async(&self, _args: Args) -> ComResult<R> {
+        unimplemented!()
+    }
+
+    async fn invoke_timeout_async(
+        &self,
+        _args: Args,
+        _timeout: std::time::Duration,
+    ) -> ComResult<R> {
+        unimplemented!()
+    }
+}
+
+#[derive(Debug)]
+pub struct LocalInvoked<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    queue: PendingQueue<Args, R>,
+}
+
+unsafe impl<Args, R> Send for LocalInvoked<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+}
+unsafe impl<Args, R> Sync for LocalInvoked<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+}
+
+impl<Args, R> Invoked<Local, Args, R> for LocalInvoked<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    type Request = LocalRequest<Args, R>;
+
+    fn try_receive(&self) -> ComResult<Option<Self::Request>> {
+        let mut queue = self.queue.0.lock().map_err(|_| ComError::LockError)?;
+
+        // check content
+        if let Some(state) = queue.pop_front() {
+            // ...and we have a request waiting
+            Ok(Some(LocalRequest { state }))
+        } else {
+            // ...or not
+            Ok(None)
+        }
+    }
+
+    fn receive(&self) -> ComResult<Self::Request> {
+        let mut queue = self.queue.0.lock().map_err(|_| ComError::LockError)?;
+
+        // until we have a result
+        loop {
+            if let Some(state) = queue.pop_front() {
+                // ...which we have
+                return Ok(LocalRequest { state });
+            } else {
+                // ...or not: wait for Condvar
+                queue = self.queue.1.wait(queue).map_err(|_| ComError::LockError)?;
+            }
+        }
+    }
+
+    fn receive_timeout(&self, timeout: std::time::Duration) -> ComResult<Self::Request> {
+        let mut queue = self.queue.0.lock().map_err(|_| ComError::LockError)?;
+
+        // until we have a result
+        loop {
+            if let Some(state) = queue.pop_front() {
+                // ...which we have
+                return Ok(LocalRequest { state });
+            } else {
+                // ...or not: wait for Condvar with timeout
+                let (new_queue, tor) = self
+                    .queue
+                    .1
+                    .wait_timeout(queue, timeout)
+                    .map_err(|_| ComError::LockError)?;
+
+                // handle timeout
+                if tor.timed_out() {
+                    return Err(ComError::Timeout);
+                }
+
+                // and try again
+                queue = new_queue;
+            }
+        }
+    }
+
+    async fn receive_async(&self) -> ComResult<Self::Request> {
+        unimplemented!()
+    }
+
+    async fn receive_timeout_async(
+        &self,
+        _timeout: std::time::Duration,
+    ) -> ComResult<Self::Request> {
+        unimplemented!()
+    }
+}
+
+#[derive(Debug)]
+pub struct LocalRpc<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    queue: PendingQueue<Args, R>,
+}
+
+unsafe impl<Args, R> Send for LocalRpc<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+}
+
+unsafe impl<Args, R> Sync for LocalRpc<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+}
+
+impl<Args, R> Clone for LocalRpc<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    fn clone(&self) -> Self {
+        Self {
+            queue: self.queue.clone(),
+        }
+    }
+}
+
+impl<Args, R> Rpc<Local, Args, R> for LocalRpc<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    type Invoker = LocalInvoker<Args, R>;
+    type Invoked = LocalInvoked<Args, R>;
+
+    fn invoker(&self) -> ComResult<Self::Invoker> {
+        Ok(LocalInvoker {
+            queue: self.queue.clone(),
+        })
+    }
+
+    fn invoked(&self) -> ComResult<Self::Invoked> {
+        Ok(LocalInvoked {
+            queue: self.queue.clone(),
+        })
+    }
+}
+
+impl<Args, R> LocalRpc<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    /// Create a new `LocalRpc` with the given arguments and result.
+    pub(crate) fn new() -> Self {
+        Self {
+            queue: Arc::new((Mutex::new(VecDeque::new()), Condvar::new())),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LocalRpcBuilder<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    max_queue_depth: usize,
+    max_invokers_client: usize,
+    max_invokers_service: usize,
+
+    _phantom: std::marker::PhantomData<(Args, R)>,
+}
+
+impl<Args, R> LocalRpcBuilder<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    pub(crate) fn new(_label: Label) -> Self {
+        LocalRpcBuilder {
+            max_queue_depth: 8,
+            max_invokers_client: 1,
+            max_invokers_service: 8,
+
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<Args, R> RpcBuilder<Local, Args, R> for LocalRpcBuilder<Args, R>
+where
+    Args: ParameterPack,
+    R: ReturnValue,
+{
+    type Rpc = LocalRpc<Args, R>;
+
+    fn with_queue_depth(mut self, queue_depth: usize) -> Self {
+        self.max_queue_depth = queue_depth;
+        self
+    }
+
+    fn with_max_invokers_client(mut self, fan_in: usize) -> Self {
+        self.max_invokers_client = fan_in;
+        self
+    }
+
+    fn with_max_invokers_service(mut self, fan_out: usize) -> Self {
+        self.max_invokers_service = fan_out;
+        self
+    }
+
+    fn build(self) -> ComResult<Self::Rpc> {
+        // create a new remote procedure
+        let remote_procedure = LocalRpc::<Args, R>::new();
+
+        // return the remote procedure
+        Ok(remote_procedure)
+    }
 }

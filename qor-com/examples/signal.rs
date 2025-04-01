@@ -21,10 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stop_signal = Arc::new((AtomicBool::new(false), Condvar::new()));
 
     // our signal
-    let signal = adapter.signal(Label::INVALID).build()?;
+    let signal = adapter.signal_builder(Label::INVALID).build()?;
 
     // listener and thread
-    let listener = signal.listener()?;
+    let listener = signal.collector()?;
     let stop_clone = stop_signal.clone();
     let listen = std::thread::spawn(move || {
         loop {

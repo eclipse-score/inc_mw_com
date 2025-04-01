@@ -9,12 +9,14 @@ qor-core = { path = "../qor-core" }
 qor-os = { path = "../qor-os" }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+iceoryx2 = "0.5.0"
 
 [features]
-default = ["signals_supported", "events_supported", "dynamic_adapter"]
+default = ["signals_supported", "events_supported", "rpcs_supported"]
 signals_supported = []
 variables_supported = []
 events_supported = []
 fire_and_forget_supported = []
 rpcs_supported = []
+interface_supported = []
 dynamic_adapter = []

@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stop_signal = Arc::new((AtomicBool::new(false), Condvar::new()));
 
     // our event
-    let event = adapter.event::<Payload>(Label::new("DemoEvent")).build()?;
+    let event = adapter.event_builder::<Payload>(Label::new("DemoEvent")).build()?;
 
     // subscriber and thread
     let subscriber = event.subscriber()?;

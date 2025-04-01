@@ -22,8 +22,8 @@ where
     fn emit(&self);
 }
 
-/// A signal `Listener` receives the emissions of a subscribed `Signal`.
-pub trait Listener<A>: Debug + Send
+/// A signal `Collector` receives the emissions of the subscribed `Signal`.
+pub trait Collector<A>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
 {
@@ -67,13 +67,13 @@ where
     type Emitter: Emitter<A>;
 
     /// Associated Listener type of the signal type
-    type Listener: Listener<A>;
+    type Collector: Collector<A>;
 
     /// Get a emit for this signal
     fn emitter(&self) -> ComResult<Self::Emitter>;
 
-    /// Get a listener for this signal
-    fn listener(&self) -> ComResult<Self::Listener>;
+    /// Get a collector for this signal
+    fn collector(&self) -> ComResult<Self::Collector>;
 }
 
 /// The Builder for a `Signal`

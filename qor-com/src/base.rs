@@ -74,6 +74,7 @@ pub enum ComError {
     QueueFull,
     FanError,
     StateError,
+    ResponseConsumed,
 }
 
 impl std::fmt::Display for ComError {
@@ -112,7 +113,7 @@ pub trait ReturnValue: Debug + Send + TypeTag + Coherent + Reloc {}
 #[cfg(feature = "signals_supported")]
 pub mod signal;
 #[cfg(feature = "signals_supported")]
-pub use signal::{Emitter, Listener, Signal, SignalBuilder};
+pub use signal::{Emitter, Collector, Signal, SignalBuilder};
 
 #[cfg(feature = "variables_supported")]
 pub mod variable;
@@ -136,7 +137,7 @@ pub use fire_and_forget::{
 pub mod remote_procedure;
 #[cfg(feature = "rpcs_supported")]
 pub use remote_procedure::{
-    Invokee, Invoker, RemoteProcedure, RemoteProcedureBuilder, Request, RequestMaybeUninit,
+    Invoker, Invoked, Rpc, RpcBuilder, Request, RequestMaybeUninit,
     RequestMut, Response, ResponseMaybeUninit, ResponseMut,
 };
 
@@ -201,7 +202,7 @@ pub trait TransportAdapter: Adapter {
 
     /// The builder used for Remote Procedures
     #[cfg(feature = "rpcs_supported")]
-    type RemoteProcedureBuilder<Args, R>: RemoteProcedureBuilder<Self, Args, R>
+    type RpcBuilder<Args, R>: RpcBuilder<Self, Args, R>
     where
         Args: ParameterPack,
         R: ReturnValue;
@@ -211,7 +212,7 @@ pub trait TransportAdapter: Adapter {
     /// signals signal the occurrence of a state change.
     /// They issue notifiers to emit the signal and listeners to wait for the signal.
     #[cfg(feature = "signals_supported")]
-    fn signal(&self, label: Label) -> Self::SignalBuilder;
+    fn signal_builder(&self, label: Label) -> Self::SignalBuilder;
 
     /// Get a variable builder for the given type.
     // fn variable<T>(&self, label: Label) -> Self::VariableBuilder<T>
@@ -223,19 +224,19 @@ pub trait TransportAdapter: Adapter {
     /// Events are information elements transporting values of a given type.
     /// They issue publishers that publish new values and subscribers that receive the values.
     #[cfg(feature = "events_supported")]
-    fn event<T>(&self, label: Label) -> Self::EventBuilder<T>
+    fn event_builder<T>(&self, label: Label) -> Self::EventBuilder<T>
     where
         T: TypeTag + Coherent + Reloc + Send + Debug;
 
     /// Get a fire-and-forget builder for the given argument types.
     #[cfg(feature = "fire_and_forget_supported")]
-    fn fire_and_forget<Args>(&self, label: Label) -> Self::FireAndForgetBuilder<Args>
+    fn fire_and_forget_builder<Args>(&self, label: Label) -> Self::FireAndForgetBuilder<Args>
     where
         Args: ParameterPack;
 
     /// Get a remote procedure builder for the given argument and result types.
     #[cfg(feature = "rpcs_supported")]
-    fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
+    fn rpc_builder<Args, R>(&self, label: Label) -> Self::RpcBuilder<Args, R>
     where
         Args: ParameterPack,
         R: ReturnValue;

@@ -29,7 +29,7 @@ use std::{
 
 /// The queue of a event, storing the unprocessed values
 ///
-pub type ValueQueue<T> = Arc<(Mutex<VecDeque<Box<T>>>, Condvar)>;
+type ValueQueue<T> = Arc<(Mutex<VecDeque<Box<T>>>, Condvar)>;
 
 /// The publish action for a local event
 #[derive(Debug)]

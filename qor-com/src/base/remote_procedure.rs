@@ -47,15 +47,15 @@ where
     type PendingRequest: PendingRequest<A, Args, R>;
 
     /// Execute the request by sending it to the service.
-    /// 
+    ///
     /// This consumes the request as it can be executed only once.
     fn execute(self) -> ComResult<Self::PendingRequest>;
 }
 
 /// An PendingRequest is a pending invocation waiting for a response.
-/// 
-/// This works similar to a future. 
-/// 
+///
+/// This works similar to a future.
+///
 /// SAFETY: Once a response is obtained consecutive calls
 /// to the receive functions is considered undefined behavior.
 pub trait PendingRequest<A, Args, R>: Debug + Send
@@ -152,7 +152,9 @@ where
     fn send(self) -> ComResult<()>;
 }
 
-/// The Invoker trait is implemented by the client side of remote procedures.
+/// The `Invoker` trait represents the client-side stub of remote procedures.
+///
+/// With an invoker the client issues invocation requests to the service side.
 pub trait Invoker<A, Args, R>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
@@ -238,8 +240,10 @@ where
     ) -> impl Future<Output = ComResult<R>> + Send;
 }
 
-/// The `Invokee` trait represents the service side of a remote procedure.
-pub trait Invokee<A, Args, R>: Debug + Send
+/// The `Invoked` trait represents the service side skeleton of a remote procedure.
+///
+/// The trait is used to receive and process incoming requests and send responses.
+pub trait Invoked<A, Args, R>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
     Args: ParameterPack,
@@ -321,41 +325,44 @@ where
     }
 }
 
-/// The `RemoteProcedure` trait represents a remote procedure call.
-pub trait RemoteProcedure<A, Args, R>: Debug + Clone + Send
+/// The `Rpc` trait represents a remote procedure call.
+///
+/// A Rpc is always considerered stateless. This means there are different bindings for incoming client connections.
+/// Therefore, the invokee of the remote procedure can directly obtained through the `Rpc` trait.
+pub trait Rpc<A, Args, R>: Debug + Clone + Send
 where
     A: TransportAdapter + ?Sized,
     Args: ParameterPack,
     R: ReturnValue,
 {
     type Invoker: Invoker<A, Args, R>;
-    type Invokee: Invokee<A, Args, R>;
+    type Invoked: Invoked<A, Args, R>;
 
     /// Get a client-side invoker for this remote procedure
     fn invoker(&self) -> ComResult<Self::Invoker>;
 
-    /// Get a service-side invokee for this remote procedure
-    fn invokee(&self) -> ComResult<Self::Invokee>;
+    /// Get a service-side remote procedure skeleton, the `Invoked`
+    fn invoked(&self) -> ComResult<Self::Invoked>;
 }
 
-/// The Builder for an `RemoteProcedure`
-pub trait RemoteProcedureBuilder<A, Args, R>: Debug
+/// The Builder for an `Rpc` remote procedure type
+pub trait RpcBuilder<A, Args, R>: Debug
 where
     A: TransportAdapter + ?Sized,
     Args: ParameterPack,
     R: ReturnValue,
 {
-    type Method: RemoteProcedure<A, Args, R>;
+    type Rpc: Rpc<A, Args, R>;
 
-    /// Set the queue depth of the event.
+    /// Set the queue depth of the remote procedure.
     fn with_queue_depth(self, queue_depth: usize) -> Self;
 
-    /// Set the queue policy of the event.
-    fn with_queue_policy(self, queue_policy: QueuePolicy) -> Self;
+    /// Set the max fan-in of `Invoker`s on client side of the remote procedure.
+    fn with_max_invokers_client(self, fan_out: usize) -> Self;
 
-    /// Set the max fan-in of the event which limits the number of publishers.
-    fn with_max_clients(self, fan_in: usize) -> Self;
+    /// Set the total max number of connected `Invoker`s on the service side of the remote procedure.
+    fn with_max_invokers_service(self, fan_out: usize) -> Self;
 
     /// build the remote procedure
-    fn build(self) -> ComResult<Self::Method>;
+    fn build(self) -> ComResult<Self::Rpc>;
 }

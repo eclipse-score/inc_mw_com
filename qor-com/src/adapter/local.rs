@@ -84,21 +84,21 @@ impl TransportAdapter for Local {
         T: Debug + Send + TypeTag + Coherent + Reloc;
 
     #[cfg(feature = "rpcs_supported")]
-    type RemoteProcedureBuilder<Args, R>
-        = LocalRemoteProcedureBuilder<Args, R>
+    type RpcBuilder<Args, R>
+        = LocalRpcBuilder<Args, R>
     where
         Args: ParameterPack,
         R: ReturnValue;
 
     /// Create a new event on the local heap
     #[cfg(feature = "signals_supported")]
-    fn signal(&self, _label: Label) -> Self::SignalBuilder {
+    fn signal_builder(&self, _label: Label) -> Self::SignalBuilder {
         LocalSignalBuilder::new()
     }
 
     /// Create a new topic on the local heap
     #[cfg(feature = "events_supported")]
-    fn event<T>(&self, _label: Label) -> Self::EventBuilder<T>
+    fn event_builder<T>(&self, _label: Label) -> Self::EventBuilder<T>
     where
         T: TypeTag + Coherent + Reloc + Send + Debug,
     {
@@ -107,12 +107,12 @@ impl TransportAdapter for Local {
 
     /// Create a new remote_procedure_call on the local heap
     #[cfg(feature = "rpcs_supported")]
-    fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
+    fn rpc_builder<Args, R>(&self, label: Label) -> Self::RpcBuilder<Args, R>
     where
         Args: ParameterPack,
         R: ReturnValue,
     {
-        LocalRemoteProcedureBuilder::new(label)
+        LocalRpcBuilder::new(label)
     }
 }
 
@@ -137,11 +137,11 @@ mod test {
 
     #[test]
     #[cfg(feature = "signals_supported")]
-    fn test_local_signal_threading() {
+    fn test_local_signal_mt() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
         static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
 
-        let signal = ADAPTER.signal(Label::INVALID).build().unwrap();
+        let signal = ADAPTER.signal_builder(Label::INVALID).build().unwrap();
 
         let emitter = signal.emitter().unwrap();
         let handle_notifier = std::thread::spawn(move || {
@@ -154,7 +154,7 @@ mod test {
             emitter.emit();
         });
 
-        let listener = signal.listener().unwrap();
+        let listener = signal.collector().unwrap();
         let handle_listener = std::thread::spawn(move || {
             let span = span!(Level::INFO, "[Local] thread_proc_listen");
             let _guard = span.enter();
@@ -176,7 +176,7 @@ mod test {
     fn test_local_event() {
         let adapter = Local::new();
         let event = adapter
-            .event::<u32>(Label::INVALID)
+            .event_builder::<u32>(Label::INVALID)
             .with_queue_depth(4)
             .build()
             .unwrap();
@@ -249,12 +249,12 @@ mod test {
 
     #[test]
     #[cfg(feature = "events_supported")]
-    fn test_local_event_threading() {
+    fn test_local_event_mt() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
         static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
 
         let event = ADAPTER
-            .event::<Payload>(Label::INVALID)
+            .event_builder::<Payload>(Label::INVALID)
             .with_queue_depth(4)
             .build()
             .unwrap();
@@ -274,4 +274,13 @@ mod test {
         let result = result.unwrap();
         assert_eq!(result, 0 + 1 + 2 + 3);
     }
+
+
+    // #[test]
+    // fn test_local_rpc() {
+    //     static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
+
+    //     let rpc = ADAPTER.rpc_builder::<(u32), bool>(Label::INVALID).build().unwrap();
+
+    // }
 }

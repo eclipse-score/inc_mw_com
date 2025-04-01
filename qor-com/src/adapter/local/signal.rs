@@ -8,7 +8,7 @@
 use super::Local;
 
 use crate::base::*;
-use crate::base::signal::{ Emitter, Listener };
+use crate::base::signal::{ Emitter, Collector };
 
 use std::{
     fmt::Debug, sync::{Arc, Condvar, Mutex}, time::Duration
@@ -42,7 +42,7 @@ impl Emitter<Local> for LocalSignal
     }
 }
 
-impl Listener<Local> for LocalSignal
+impl Collector<Local> for LocalSignal
 {
     // check the event flag
     #[inline(always)]
@@ -125,13 +125,13 @@ impl Listener<Local> for LocalSignal
 impl Signal<Local> for LocalSignal
 {
     type Emitter = Self;
-    type Listener = Self;
+    type Collector = Self;
     
     fn emitter(&self) -> ComResult<Self::Emitter> {
         Ok(self.clone())
     }
 
-    fn listener(&self) -> ComResult<Self::Listener> {
+    fn collector(&self) -> ComResult<Self::Collector> {
         Ok(self.clone())
     }
 }
