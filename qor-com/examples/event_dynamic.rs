@@ -41,6 +41,7 @@ impl Coherent for Payload {}
 unsafe impl Reloc for Payload {}
 
 /// Here is our publisher thread with Dynamic Publisher in the type agnostic version using `impl Publisher<Dynamic, Payload>`
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "events_supported")]
 fn publisher_thread(
     stop_signal: Arc<(AtomicBool, Condvar)>,
@@ -78,6 +79,7 @@ fn publisher_thread(
 }
 
 /// Here is our subscriber thread with Dynamic Subscriber in the type explicit version using `DynamicSubscriber<Payload>`
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "events_supported")]
 fn subscriber_thread(
     stop_signal: Arc<(AtomicBool, Condvar)>,
@@ -105,6 +107,7 @@ fn subscriber_thread(
     }
 }
 
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "events_supported")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // build the actual adapter
@@ -143,7 +146,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(not(feature = "events_supported"))]
 fn main() {
     println!("This example requires the `signals_supported` feature to be enabled")
 }
+
+#[cfg(not(feature = "dynamic_adapter"))]
+fn main() {
+    println!("This example requires the `dynamic_adapter` feature to be enabled")
+}
+
+

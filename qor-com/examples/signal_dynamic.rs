@@ -9,6 +9,8 @@
 #[allow(unused_imports)]
 use qor_core::prelude::*;
 
+
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "signals_supported")]
 use qor_com::prelude::*;
 
@@ -22,6 +24,7 @@ use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar};
 const CYCLE_TIME: Duration = Duration::from_secs(1);
 
 /// Here is our emitter thread with Dynamic Emitter in the type agnostic version using `impl Emitter<Dynamic>` 
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "signals_supported")]
 fn emitter_thread(stop_signal: Arc<(AtomicBool, Condvar)>, emitter: impl Emitter<Dynamic>) {
     // loop until the stop signal is set
@@ -41,8 +44,9 @@ fn emitter_thread(stop_signal: Arc<(AtomicBool, Condvar)>, emitter: impl Emitter
 }
 
 /// Here is our listener thread with Dynamic Listener in the type explicit version using `DynamicSignalListener`
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "signals_supported")]
-fn listener_thread(stop_signal: Arc<(AtomicBool, Condvar)>, listener: DynamicSignalListener) {
+fn listener_thread(stop_signal: Arc<(AtomicBool, Condvar)>, listener: DynamicCollector) {
     // loop until the stop signal is set
     loop {
         // check the stop signal
@@ -65,6 +69,7 @@ fn listener_thread(stop_signal: Arc<(AtomicBool, Condvar)>, listener: DynamicSig
     }
 }
 
+#[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "signals_supported")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // build the actual adapter
@@ -78,7 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let signal = adapter.signal(Label::INVALID).build()?;
 
     // listener and thread
-    let listener = signal.listener()?;
+    let listener = signal.collector()?;
     let stop_clone = stop_signal.clone();
     let listen = std::thread::spawn(move || {
         listener_thread(stop_clone, listener);
@@ -103,7 +108,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(not (feature = "signals_supported"))]
+#[cfg(feature = "dynamic_adapter")]
+#[cfg(not(feature = "events_supported"))]
 fn main() {
     println!("This example requires the `signals_supported` feature to be enabled")
+}
+
+#[cfg(not(feature = "dynamic_adapter"))]
+fn main() {
+    println!("This example requires the `dynamic_adapter` feature to be enabled")
 }
