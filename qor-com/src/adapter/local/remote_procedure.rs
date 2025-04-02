@@ -23,24 +23,27 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Condvar;
 use std::sync::Mutex;
-use std::{fmt::Debug, sync::Arc};
+use std::sync::Arc;
 
 //
 // Rpc
 //
 
-type PendingQueue<Args, R> = Arc<(
-    Mutex<VecDeque<Arc<UnsafeCell<LocalRequestState<Args, R>>>>>,
+type PendingQueue<F, Args, R> = Arc<(
+    Mutex<VecDeque<Arc<UnsafeCell<LocalRequestState<F, Args, R>>>>>,
     Condvar,
 )>;
 
 /// The inner structure of a remote procedure request and response
-#[derive(Debug)]
-struct LocalRequestState<Args, R>
+// #[derive(Debug)]
+struct LocalRequestState<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
+    _phantom: PhantomData<F>,
+
     /// The arguments of the pending request and condition variable
     ///
     /// SAFETY: The args are initialized as soon as this inner is no longer owned by `LocalRequestMaybeUninit`
@@ -56,28 +59,33 @@ where
     result_control: (Mutex<(bool, bool)>, Condvar),
 }
 
-unsafe impl<Args, R> Send for LocalRequestState<Args, R>
+unsafe impl<F, Args, R> Send for LocalRequestState<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-unsafe impl<Args, R> Sync for LocalRequestState<Args, R>
+unsafe impl<F, Args, R> Sync for LocalRequestState<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<Args, R> LocalRequestState<Args, R>
+impl<F, Args, R> LocalRequestState<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     /// Create a new `LocalPendingRequestInner` with the given arguments and result.
     fn new() -> Self {
         Self {
+            _phantom: PhantomData,
+
             args: MaybeUninit::uninit(),
             args_control: (Mutex::new(false), Condvar::new()),
 
@@ -87,36 +95,43 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalRequestMaybeUninit<Args, R>
+// #[derive(Debug)]
+pub struct LocalRequestMaybeUninit<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    queue: PendingQueue<Args, R>,
-    state: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
+    _phantom: PhantomData<F>,
+
+    queue: PendingQueue<F, Args, R>,
+    state: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-impl<Args, R> LocalRequestMaybeUninit<Args, R>
+impl<F, Args, R> LocalRequestMaybeUninit<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     /// Create a new `LocalRequestMaybeUninit` with the given arguments.
-    fn new(queue: PendingQueue<Args, R>) -> Self {
+    fn new(queue: PendingQueue<F, Args, R>) -> Self {
         Self {
+            _phantom: PhantomData,
+
             queue,
             state: Arc::new(UnsafeCell::new(LocalRequestState::new())),
         }
     }
 }
 
-impl<Args, R> RequestMaybeUninit<Local, Args, R> for LocalRequestMaybeUninit<Args, R>
+impl<F, Args, R> RequestMaybeUninit<Local, F, Args, R> for LocalRequestMaybeUninit<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type RequestMut = LocalRequestMut<Args, R>;
+    type RequestMut = LocalRequestMut<F, Args, R>;
 
     fn write(self, args: Args) -> Self::RequestMut {
         // SAFETY: The `args` is initialized and the `LocalRequestMut` is created.
@@ -139,20 +154,22 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalRequestMut<Args, R>
+// #[derive(Debug)]
+pub struct LocalRequestMut<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    queue: PendingQueue<Args, R>,
-    request: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
+    queue: PendingQueue<F, Args, R>,
+    request: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-impl<Args, R> Deref for LocalRequestMut<Args, R>
+impl<F, Args, R> Deref for LocalRequestMut<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     type Target = Args;
 
@@ -168,10 +185,11 @@ where
     }
 }
 
-impl<Args, R> DerefMut for LocalRequestMut<Args, R>
+impl<F, Args, R> DerefMut for LocalRequestMut<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: Only the owner of the LocalRequestMut can call this. LocalRequestMut is not Send, so we have single thread guarantee
@@ -185,12 +203,13 @@ where
     }
 }
 
-impl<Args, R> RequestMut<Local, Args, R> for LocalRequestMut<Args, R>
+impl<F, Args, R> RequestMut<Local, F, Args, R> for LocalRequestMut<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type PendingRequest = LocalPendingRequest<Args, R>;
+    type PendingRequest = LocalPendingRequest<F, Args, R>;
 
     fn execute(self) -> ComResult<Self::PendingRequest> {
         let inner = unsafe { &mut *self.request.get() };
@@ -212,34 +231,38 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalPendingRequest<Args, R>
+// #[derive(Debug)]
+pub struct LocalPendingRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    inner: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
+    inner: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-unsafe impl<Args, R> Send for LocalPendingRequest<Args, R>
+unsafe impl<F, Args, R> Send for LocalPendingRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
-unsafe impl<Args, R> Sync for LocalPendingRequest<Args, R>
+unsafe impl<F, Args, R> Sync for LocalPendingRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<Args, R> PendingRequest<Local, Args, R> for LocalPendingRequest<Args, R>
+impl<F, Args, R> PendingRequest<Local, F, Args, R> for LocalPendingRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Response = LocalResponse<Args, R>;
+    type Response = LocalResponse<F, Args, R>;
 
     fn try_receive(&self) -> ComResult<Option<Self::Response>> {
         // SAFETY: This will work as we checked _and_ hold the safety lock
@@ -358,32 +381,35 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalRequest<Args, R>
+pub struct LocalRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    state: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
+    state: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-unsafe impl<Args, R> Send for LocalRequest<Args, R>
+unsafe impl<F, Args, R> Send for LocalRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
-unsafe impl<Args, R> Sync for LocalRequest<Args, R>
+unsafe impl<F, Args, R> Sync for LocalRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<Args, R> Deref for LocalRequest<Args, R>
+impl<F, Args, R> Deref for LocalRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     type Target = Args;
 
@@ -392,7 +418,7 @@ where
         unsafe {
             // get the inner structure
             let inner = &mut *self.state.get();
-            debug_assert!(*inner.args_control.0.lock().unwrap());
+            debug_assert!(!*inner.args_control.0.lock().unwrap());
 
             // SAFETY: The `args` are initialized inside LocalRequestMut
             &*(inner.args.as_ptr() as *const Args)
@@ -400,12 +426,13 @@ where
     }
 }
 
-impl<Args, R> Request<Local, Args, R> for LocalRequest<Args, R>
+impl<F, Args, R> Request<Local, F, Args, R> for LocalRequest<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type ResponseMaybeUninit = LocalResponseMaybeUninit<Args, R>;
+    type ResponseMaybeUninit = LocalResponseMaybeUninit<F, Args, R>;
 
     fn loan_response_uninit(&self) -> ComResult<Self::ResponseMaybeUninit> {
         Ok(LocalResponseMaybeUninit {
@@ -414,21 +441,22 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalResponseMaybeUninit<Args, R>
+pub struct LocalResponseMaybeUninit<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    inner: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
+    inner: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-impl<Args, R> ResponseMaybeUninit<Local, Args, R> for LocalResponseMaybeUninit<Args, R>
+impl<F, Args, R> ResponseMaybeUninit<Local, F, Args, R> for LocalResponseMaybeUninit<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type ResponseMut = LocalResponseMut<Args, R>;
+    type ResponseMut = LocalResponseMut<F, Args, R>;
 
     fn write(self, result: R) -> Self::ResponseMut {
         // SAFETY: The `args` is initialized and the `LocalRequestMut` is created.
@@ -448,19 +476,21 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalResponseMut<Args, R>
+// #[derive(Debug)]
+pub struct LocalResponseMut<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    inner: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
+    inner: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-impl<Args, R> Deref for LocalResponseMut<Args, R>
+impl<F, Args, R> Deref for LocalResponseMut<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     type Target = R;
 
@@ -475,10 +505,11 @@ where
         }
     }
 }
-impl<Args, R> DerefMut for LocalResponseMut<Args, R>
+impl<F, Args, R> DerefMut for LocalResponseMut<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: Only the owner of the LocalRequestMut can call this. LocalResponseMut is not Send, so we have single thread guarantee
@@ -493,10 +524,11 @@ where
     }
 }
 
-impl<Args, R> ResponseMut<Local, Args, R> for LocalResponseMut<Args, R>
+impl<F, Args, R> ResponseMut<Local, F, Args, R> for LocalResponseMut<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     fn send(self) -> ComResult<()> {
         let inner = unsafe { &mut *self.inner.get() };
@@ -517,19 +549,21 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalResponse<Args, R>
+// #[derive(Debug)]
+pub struct LocalResponse<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    inner: Arc<UnsafeCell<LocalRequestState<Args, R>>>,
+    inner: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-impl<Args, R> Deref for LocalResponse<Args, R>
+impl<F, Args, R> Deref for LocalResponse<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     type Target = R;
 
@@ -546,42 +580,47 @@ where
     }
 }
 
-impl<Args, R> Response<Local, Args, R> for LocalResponse<Args, R>
+impl<F, Args, R> Response<Local, F, Args, R> for LocalResponse<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-#[derive(Debug)]
-pub struct LocalInvoker<Args, R>
+// #[derive(Debug)]
+pub struct LocalInvoker<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    queue: PendingQueue<Args, R>,
+    queue: PendingQueue<F, Args, R>,
 }
 
-unsafe impl<Args, R> Send for LocalInvoker<Args, R>
+unsafe impl<F, Args, R> Send for LocalInvoker<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
-{
-}
-
-unsafe impl<Args, R> Sync for LocalInvoker<Args, R>
-where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<Args, R> Invoker<Local, Args, R> for LocalInvoker<Args, R>
+unsafe impl<F, Args, R> Sync for LocalInvoker<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type RequestMaybeUninit = LocalRequestMaybeUninit<Args, R>;
+}
+
+impl<F, Args, R> Invoker<Local, F, Args, R> for LocalInvoker<F, Args, R>
+where
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
+{
+    type RequestMaybeUninit = LocalRequestMaybeUninit<F, Args, R>;
 
     fn loan_uninit(&self) -> ComResult<Self::RequestMaybeUninit> {
         Ok(LocalRequestMaybeUninit::new(self.queue.clone()))
@@ -600,34 +639,38 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalInvoked<Args, R>
+// #[derive(Debug)]
+pub struct LocalInvoked<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    queue: PendingQueue<Args, R>,
+    queue: PendingQueue<F, Args, R>,
 }
 
-unsafe impl<Args, R> Send for LocalInvoked<Args, R>
+unsafe impl<F, Args, R> Send for LocalInvoked<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
-unsafe impl<Args, R> Sync for LocalInvoked<Args, R>
+unsafe impl<F, Args, R> Sync for LocalInvoked<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<Args, R> Invoked<Local, Args, R> for LocalInvoked<Args, R>
+impl<F, Args, R> Invoked<Local, F, Args, R> for LocalInvoked<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Request = LocalRequest<Args, R>;
+    type Request = LocalRequest<F, Args, R>;
 
     fn try_receive(&self) -> ComResult<Option<Self::Request>> {
         let mut queue = self.queue.0.lock().map_err(|_| ComError::LockError)?;
@@ -696,33 +739,37 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalRpc<Args, R>
+// #[derive(Debug)]
+pub struct LocalRpc<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    queue: PendingQueue<Args, R>,
+    queue: PendingQueue<F, Args, R>,
 }
 
-unsafe impl<Args, R> Send for LocalRpc<Args, R>
+unsafe impl<F, Args, R> Send for LocalRpc<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
-{
-}
-
-unsafe impl<Args, R> Sync for LocalRpc<Args, R>
-where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<Args, R> Clone for LocalRpc<Args, R>
+unsafe impl<F, Args, R> Sync for LocalRpc<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
+{
+}
+
+impl<F, Args, R> Clone for LocalRpc<F, Args, R>
+where
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     fn clone(&self) -> Self {
         Self {
@@ -731,13 +778,14 @@ where
     }
 }
 
-impl<Args, R> Rpc<Local, Args, R> for LocalRpc<Args, R>
+impl<F, Args, R> Rpc<Local, F, Args, R> for LocalRpc<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Invoker = LocalInvoker<Args, R>;
-    type Invoked = LocalInvoked<Args, R>;
+    type Invoker = LocalInvoker<F, Args, R>;
+    type Invoked = LocalInvoked<F, Args, R>;
 
     fn invoker(&self) -> ComResult<Self::Invoker> {
         Ok(LocalInvoker {
@@ -752,10 +800,11 @@ where
     }
 }
 
-impl<Args, R> LocalRpc<Args, R>
+impl<F, Args, R> LocalRpc<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     /// Create a new `LocalRpc` with the given arguments and result.
     pub(crate) fn new() -> Self {
@@ -765,23 +814,24 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LocalRpcBuilder<Args, R>
+pub struct LocalRpcBuilder<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     max_queue_depth: usize,
     max_invokers_client: usize,
     max_invokers_service: usize,
 
-    _phantom: std::marker::PhantomData<(Args, R)>,
+    _phantom: std::marker::PhantomData<(F, Args, R)>,
 }
 
-impl<Args, R> LocalRpcBuilder<Args, R>
+impl<F, Args, R> LocalRpcBuilder<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     pub(crate) fn new(_label: Label) -> Self {
         LocalRpcBuilder {
@@ -794,12 +844,13 @@ where
     }
 }
 
-impl<Args, R> RpcBuilder<Local, Args, R> for LocalRpcBuilder<Args, R>
+impl<F, Args, R> RpcBuilder<Local, F, Args, R> for LocalRpcBuilder<F, Args, R>
 where
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args)->R,
+    Args: Copy + Send,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Rpc = LocalRpc<Args, R>;
+    type Rpc = LocalRpc<F, Args, R>;
 
     fn with_queue_depth(mut self, queue_depth: usize) -> Self {
         self.max_queue_depth = queue_depth;
@@ -818,7 +869,7 @@ where
 
     fn build(self) -> ComResult<Self::Rpc> {
         // create a new remote procedure
-        let remote_procedure = LocalRpc::<Args, R>::new();
+        let remote_procedure = LocalRpc::<F, Args, R>::new();
 
         // return the remote procedure
         Ok(remote_procedure)

@@ -84,11 +84,12 @@ impl TransportAdapter for Local {
         T: Debug + Send + TypeTag + Coherent + Reloc;
 
     #[cfg(feature = "rpcs_supported")]
-    type RpcBuilder<Args, R>
-        = LocalRpcBuilder<Args, R>
+    type RpcBuilder<F, Args, R>
+        = LocalRpcBuilder<F, Args, R>
     where
-        Args: ParameterPack,
-        R: ReturnValue;
+        F: Fn(Args) -> R,
+        Args: Copy + Send,
+        R: Send + Copy + TypeTag + Coherent + Reloc;
 
     /// Create a new event on the local heap
     #[cfg(feature = "signals_supported")]
@@ -107,10 +108,11 @@ impl TransportAdapter for Local {
 
     /// Create a new remote_procedure_call on the local heap
     #[cfg(feature = "rpcs_supported")]
-    fn rpc_builder<Args, R>(&self, label: Label) -> Self::RpcBuilder<Args, R>
+    fn rpc_builder<F, Args, R>(&self, label: Label) -> Self::RpcBuilder<F, Args, R>
     where
-        Args: ParameterPack,
-        R: ReturnValue,
+        F: Fn(Args) -> R,
+        Args: Copy + Send,
+        R: Send + Copy + TypeTag + Coherent + Reloc,
     {
         LocalRpcBuilder::new(label)
     }
@@ -127,6 +129,8 @@ impl IntoDynamic<Local> for Local {
 mod test {
     use std::{thread, time::Duration};
     use tracing::{info, span, Level};
+
+    use crate::base::remote_procedure::PendingRequest;
 
     use super::*;
 
@@ -275,12 +279,33 @@ mod test {
         assert_eq!(result, 0 + 1 + 2 + 3);
     }
 
+    #[test]
+    fn test_local_rpc() {
+        static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
 
-    // #[test]
-    // fn test_local_rpc() {
-    //     static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
+        // Create a new RPC for a function signature fn(u32)-> bool
+        let rpc = ADAPTER
+            .rpc_builder::<fn(u32) -> bool, _, _>(Label::INVALID)
+            .build()
+            .unwrap();
 
-    //     let rpc = ADAPTER.rpc_builder::<(u32), bool>(Label::INVALID).build().unwrap();
+        // The client for the RPC
+        let invoker = rpc.invoker().unwrap();
 
-    // }
+        // The service of the RPC
+        let invoked = rpc.invoked().unwrap();
+
+        // Client: Invoke with argument
+        let request = invoker.loan(42).unwrap();
+        let pending = request.execute().unwrap();
+
+        // Service: Process the invokation
+        invoked.receive_and_execute(|value| value > 42).unwrap();
+
+        // Client: Wait for the result
+        let response = pending.receive().unwrap();
+        let result = *response;
+
+        println!("Result: {:?}", result);
+    }
 }

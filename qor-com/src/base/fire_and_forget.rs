@@ -22,7 +22,7 @@ use std::{
 pub trait Notification<A, Args>: Debug + Send + Deref<Target = Args>
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
+    Args: Copy + Send,
 {
 }
 
@@ -30,7 +30,7 @@ where
 pub trait NotificationMut<A, Args>: Debug + Send + DerefMut<Target = Args>
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
+    Args: Copy + Send,
 {
     fn notify(&self) -> ComResult<()>;
 }
@@ -39,7 +39,7 @@ where
 pub trait NotificationMaybeUninit<A, Args>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
+    Args: Copy + Send,
 {
     type NotificationMut: NotificationMut<A, Args>;
 
@@ -57,7 +57,7 @@ where
 pub trait Notifier<A, Args>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
+    Args: Copy + Send,
 {
     /// The associated uninitialized notification type.
     type NotificationMaybeUninit: NotificationMaybeUninit<A, Args>;
@@ -91,7 +91,7 @@ where
 pub trait Receiver<A, Args>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
+    Args: Copy + Send,
 {
     type Notification: Notification<A, Args>;
 
@@ -124,7 +124,7 @@ where
 pub trait FireAndForget<A, Args>: Debug + Clone + Send
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
+    Args: Copy + Send,
 {
     type Notifier: Notifier<A, Args>;
     type Receiver: Receiver<A, Args>;
@@ -140,7 +140,7 @@ where
 pub trait FireAndForgetBuilder<A, Args>: Debug
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
+    Args: Copy + Send,
 {
     type FireAndForget: FireAndForget<A, Args>;
 

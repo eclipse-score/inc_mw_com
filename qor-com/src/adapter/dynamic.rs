@@ -119,8 +119,8 @@ impl TransportAdapter for Dynamic {
     type RemoteProcedureBuilder<Args, R>
         = DynamicRemoteProcedureBuilder<Args, R>
     where
-        Args: ParameterPack,
-        R: ReturnValue;
+        Args: Copy + Send,
+        R: Send + Copy + TypeTag + Coherent + Reloc;
 
     /// Create a new event on the local heap
     #[cfg(feature = "signals_supported")]
@@ -151,8 +151,8 @@ impl TransportAdapter for Dynamic {
     #[cfg(feature = "rpcs_supported")]   
     fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
     where
-        Args: ParameterPack,
-        R: ReturnValue,
+        Args: Copy + Send,
+        R: Send + Copy + TypeTag + Coherent + Reloc,
     {
         DynamicRemoteProcedureBuilder::new(label)
     }

@@ -99,11 +99,6 @@ pub enum QueuePolicy {
     ErrorOnFull,
 }
 
-/// Parameter packs are tuples with all elements implementing the `TypeTag + Coherent + Reloc` traits.
-pub trait ParameterPack: Debug + Send + TypeTag + Coherent + Reloc + Tuple {}
-
-/// A return value is a marker that combines the TypeTag, Coherent and Reloc traits.
-pub trait ReturnValue: Debug + Send + TypeTag + Coherent + Reloc {}
 
 ////////////////////////////////////////////////////////////////
 //
@@ -198,14 +193,15 @@ pub trait TransportAdapter: Adapter {
     #[cfg(feature = "fire_and_forget_supported")]
     type FireAndForgetBuilder<Args>: FireAndForgetBuilder<Self, Args>
     where
-        Args: ParameterPack;
+        Args: Copy + Send;
 
     /// The builder used for Remote Procedures
     #[cfg(feature = "rpcs_supported")]
-    type RpcBuilder<Args, R>: RpcBuilder<Self, Args, R>
+    type RpcBuilder<F, Args, R>: RpcBuilder<Self, F, Args, R>
     where
-        Args: ParameterPack,
-        R: ReturnValue;
+        F: Fn(Args)->R,
+        Args: Copy + Send,
+        R: Send + Copy + TypeTag + Coherent + Reloc;
 
     /// Get an signal builder.
     ///
@@ -232,14 +228,15 @@ pub trait TransportAdapter: Adapter {
     #[cfg(feature = "fire_and_forget_supported")]
     fn fire_and_forget_builder<Args>(&self, label: Label) -> Self::FireAndForgetBuilder<Args>
     where
-        Args: ParameterPack;
+        Args: Copy + Send;
 
     /// Get a remote procedure builder for the given argument and result types.
     #[cfg(feature = "rpcs_supported")]
-    fn rpc_builder<Args, R>(&self, label: Label) -> Self::RpcBuilder<Args, R>
+    fn rpc_builder<F, Args, R>(&self, label: Label) -> Self::RpcBuilder<F, Args, R>
     where
-        Args: ParameterPack,
-        R: ReturnValue;
+        F: Fn(Args)->R,
+        Args: Copy + Send,
+        R: Send + Copy + TypeTag + Coherent + Reloc;
 }
 
 /// The IntoDynamic trait is used for adapters that have support in the `Dynamic` adapter.

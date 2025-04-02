@@ -9,7 +9,6 @@
 use super::*;
 
 use std::{
-    fmt::Debug,
     future::Future,
     ops::{Deref, DerefMut},
     time::Duration,
@@ -19,13 +18,14 @@ use std::{
 // Remote Procedure Calls: Request-Response Messaging Pattern
 
 /// A `RequestMaybeUninit` is an uninitialized invocation request used on client side for invocations
-pub trait RequestMaybeUninit<A, Args, R>: Debug
+pub trait RequestMaybeUninit<A, F, Args, R>
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type RequestMut: RequestMut<A, Args, R>;
+    type RequestMut: RequestMut<A, F, Args, R>;
 
     /// Write the arguments into the buffer and render it initialized.
     fn write(self, args: Args) -> Self::RequestMut;
@@ -38,13 +38,14 @@ where
 }
 
 /// A `RequestMut` is a mutable invocation request used on client side for invocations
-pub trait RequestMut<A, Args, R>: Debug + DerefMut<Target = Args>
+pub trait RequestMut<A, F, Args, R>: DerefMut<Target = Args>
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type PendingRequest: PendingRequest<A, Args, R>;
+    type PendingRequest: PendingRequest<A, F, Args, R>;
 
     /// Execute the request by sending it to the service.
     ///
@@ -58,13 +59,14 @@ where
 ///
 /// SAFETY: Once a response is obtained consecutive calls
 /// to the receive functions is considered undefined behavior.
-pub trait PendingRequest<A, Args, R>: Debug + Send
+pub trait PendingRequest<A, F, Args, R>: Send
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Response: Response<A, Args, R>;
+    type Response: Response<A, F, Args, R>;
 
     /// Check if the response is ready.
     fn try_receive(&self) -> ComResult<Option<Self::Response>>;
@@ -86,22 +88,33 @@ where
 }
 
 /// The `Request` is a read-only invocation request used on service side for incoming invocations
-pub trait Request<A, Args, R>: Debug + Send + Deref<Target = Args>
+pub trait Request<A, F, Args, R>: Send + Deref<Target = Args>
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type ResponseMaybeUninit: ResponseMaybeUninit<A, Args, R>;
+    type ResponseMaybeUninit: ResponseMaybeUninit<A, F, Args, R>;
 
     /// Get an uninitialized response for the return value type.
     fn loan_response_uninit(&self) -> ComResult<Self::ResponseMaybeUninit>;
 
     /// Get an initialized response for the given return value type.
     ///
-    /// Read as `loan_response(&self, value: R) -> ComResult<ResponseMut<Self, Args, R>>`.
+    /// Read as `loan_response(&self, value: R) -> ComResult<ResponseMut<Self, F, Args, R>>`.
     /// The return type is the associated ResponseMut type of the ResponseMaybeUninit.
-    fn loan_response(&self, value: R) -> ComResult<<<Self as Request<A, Args, R>>::ResponseMaybeUninit as ResponseMaybeUninit<A, Args, R>>::ResponseMut>{
+    fn loan_response(
+        &self,
+        value: R,
+    ) -> ComResult<
+        <<Self as Request<A, F, Args, R>>::ResponseMaybeUninit as ResponseMaybeUninit<
+            A,
+            F,
+            Args,
+            R,
+        >>::ResponseMut,
+    > {
         let response = self.loan_response_uninit()?;
         Ok(response.write(value))
     }
@@ -118,20 +131,24 @@ where
 ///
 /// The response can only obtained by a `PendingRequest`. In case of a communication error,
 /// PendingRequest will return an error instead of a response.
-pub trait Response<A, Args, R>: Debug + Deref<Target = R>
+pub trait Response<A, F, Args, R>: Deref<Target = R>
 where
     A: TransportAdapter + ?Sized,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
 /// The `ResponseMaybeUninit` is an uninitialized response of a remote procedure call used on service side for sending results.
-pub trait ResponseMaybeUninit<A, Args, R>: Debug
+pub trait ResponseMaybeUninit<A, F, Args, R>
 where
     A: TransportAdapter + ?Sized,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type ResponseMut: ResponseMut<A, Args, R>;
+    type ResponseMut: ResponseMut<A, F, Args, R>;
 
     /// Write the value into the buffer and render it initialized.
     fn write(self, value: R) -> Self::ResponseMut;
@@ -144,10 +161,12 @@ where
 }
 
 /// The `ResponseMut` is a mutable response of a remote procedure call used on service side for sending results.
-pub trait ResponseMut<A, Args, R>: Debug + DerefMut<Target = R>
+pub trait ResponseMut<A, F, Args, R>: DerefMut<Target = R>
 where
     A: TransportAdapter + ?Sized,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     fn send(self) -> ComResult<()>;
 }
@@ -155,13 +174,14 @@ where
 /// The `Invoker` trait represents the client-side stub of remote procedures.
 ///
 /// With an invoker the client issues invocation requests to the service side.
-pub trait Invoker<A, Args, R>: Debug + Send
+pub trait Invoker<A, F, Args, R>: Send
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type RequestMaybeUninit: RequestMaybeUninit<A, Args, R>;
+    type RequestMaybeUninit: RequestMaybeUninit<A, F, Args, R>;
     // Response := Self::RequestMaybeUninit::RequestMut::PendingRequest::Response;
 
     /// Prepare an invocation request with uninitialized arguments.
@@ -178,7 +198,14 @@ where
     fn loan(
         &self,
         args: Args,
-    ) -> ComResult<<<Self as Invoker<A, Args, R>>::RequestMaybeUninit as RequestMaybeUninit<A, Args, R>>::RequestMut>{
+    ) -> ComResult<
+        <<Self as Invoker<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninit<
+            A,
+            F,
+            Args,
+            R,
+        >>::RequestMut,
+    > {
         let request = self.loan_uninit()?;
         Ok(request.write(args))
     }
@@ -189,13 +216,22 @@ where
     ///
     /// This operation will block until the result of the Method invocation is available.
     /// The result of a completed Method operation will always wrap into a `ComResult` as the communication itself may fail.
-    fn invoke(&self, args: Args) -> ComResult<
-    <<<<Self as Invoker<A, Args, R>>
-                ::RequestMaybeUninit as RequestMaybeUninit<A, Args, R>>
-            ::RequestMut as RequestMut<A, Args, R>>
-        ::PendingRequest as PendingRequest<A, Args, R>>
-    ::Response>
-    {
+    fn invoke(
+        &self,
+        args: Args,
+    ) -> ComResult<
+        <<<<Self as Invoker<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninit<
+            A,
+            F,
+            Args,
+            R,
+        >>::RequestMut as RequestMut<A, F, Args, R>>::PendingRequest as PendingRequest<
+            A,
+            F,
+            Args,
+            R,
+        >>::Response,
+    > {
         let request = self.loan(args)?;
         let pending = request.execute()?;
         pending.receive()
@@ -207,13 +243,23 @@ where
     ///
     /// This operation will block until the result of the Method invocation is available or the timeout occurs.
     /// The result of a completed Method operation will always wrap into a `ComResult` as the communication itself may fail.
-    fn invoke_timeout(&self, args: Args, timeout: Duration) -> ComResult<
-        <<<<Self as Invoker<A, Args, R>>
-                    ::RequestMaybeUninit as RequestMaybeUninit<A, Args, R>>
-                ::RequestMut as RequestMut<A, Args, R>>
-            ::PendingRequest as PendingRequest<A, Args, R>>
-        ::Response>
-    {
+    fn invoke_timeout(
+        &self,
+        args: Args,
+        timeout: Duration,
+    ) -> ComResult<
+        <<<<Self as Invoker<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninit<
+            A,
+            F,
+            Args,
+            R,
+        >>::RequestMut as RequestMut<A, F, Args, R>>::PendingRequest as PendingRequest<
+            A,
+            F,
+            Args,
+            R,
+        >>::Response,
+    > {
         let request = self.loan(args)?;
         let pending = request.execute()?;
         pending.receive_timeout(timeout)
@@ -243,14 +289,15 @@ where
 /// The `Invoked` trait represents the service side skeleton of a remote procedure.
 ///
 /// The trait is used to receive and process incoming requests and send responses.
-pub trait Invoked<A, Args, R>: Debug + Send
+pub trait Invoked<A, F, Args, R>: Send
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Request: Request<A, Args, R>;
-    // We do not define a Response, as ResponseMaybeUninit := <Self::Request as Request<A, Args, R>>::ResponseMybeUninit;
+    type Request: Request<A, F, Args, R>;
+    // We do not define a Response, as ResponseMaybeUninit := <Self::Request as Request<A, F, Args, R>>::ResponseMybeUninit;
 
     /// test if an incoming invocation request is present and return the corresponding request.
     ///
@@ -267,15 +314,16 @@ where
     ///
     /// When this method is successful, a request has been received and the response has been sent to the client.
     /// The method returns with errors if the peer closed the connection or the communication failed otherwise.
-    fn receive_and_execute<F>(&self, f: F) -> ComResult<()>
+    fn receive_and_execute<FO>(&self, f: FO) -> ComResult<()>
     where
-        F: FnOnce(&Args) -> R,
+        FO: FnOnce(Args) -> R,
     {
         // wait for incoming invocations
         let request: Self::Request = self.receive()?;
 
         // call the function with the received arguments
-        let result = f(request.deref());
+        // That this works is rustc magic. `Fn<Args>` will automatically regard `Args` as tuple.
+        let result = f(*request);
 
         // build and send the response
         request.respond(result)?;
@@ -283,15 +331,15 @@ where
     }
 
     /// wait for incoming invocations with timeout and return the result of the execution of the given function with the received arguments.
-    fn receive_timeout_and_execute<F>(&self, f: F, timeout: Duration) -> ComResult<()>
+    fn receive_timeout_and_execute<FO>(&self, f: FO, timeout: Duration) -> ComResult<()>
     where
-        F: FnOnce(&Args) -> R,
+        FO: FnOnce(Args) -> R,
     {
         // wait for incoming invocations
         let request = self.receive_timeout(timeout)?;
 
         // call the function with the received arguments
-        let result = f(request.deref());
+        let result = f(*request);
 
         // build and send the response
         request.respond(result)?;
@@ -311,14 +359,17 @@ where
 
     /// create a future that waits for incoming calls on the remote procedure port and
     /// returns the result of the invocation of the given async function with the received arguments.
-    fn receive_and_execute_async<F, Fut>(&self, f: F) -> impl Future<Output = ComResult<()>>
+    fn receive_and_execute_async<Fasync, Fut>(
+        &self,
+        f: Fasync,
+    ) -> impl Future<Output = ComResult<()>>
     where
-        F: Fn(&Args) -> Fut + Send,
+        Fasync: FnOnce(Args) -> Fut,
         Fut: Future<Output = R> + Send,
     {
         async move {
             let request = self.receive_async().await?;
-            let result = f(request.deref()).await;
+            let result = f(*request).await;
             request.respond(result)?;
             Ok(())
         }
@@ -329,14 +380,15 @@ where
 ///
 /// A Rpc is always considerered stateless. This means there are different bindings for incoming client connections.
 /// Therefore, the invokee of the remote procedure can directly obtained through the `Rpc` trait.
-pub trait Rpc<A, Args, R>: Debug + Clone + Send
+pub trait Rpc<A, F, Args, R>: Clone + Send
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Invoker: Invoker<A, Args, R>;
-    type Invoked: Invoked<A, Args, R>;
+    type Invoker: Invoker<A, F, Args, R>;
+    type Invoked: Invoked<A, F, Args, R>;
 
     /// Get a client-side invoker for this remote procedure
     fn invoker(&self) -> ComResult<Self::Invoker>;
@@ -346,13 +398,14 @@ where
 }
 
 /// The Builder for an `Rpc` remote procedure type
-pub trait RpcBuilder<A, Args, R>: Debug
+pub trait RpcBuilder<A, F, Args, R>:
 where
     A: TransportAdapter + ?Sized,
-    Args: ParameterPack,
-    R: ReturnValue,
+    F: Fn(Args) -> R,
+    Args: Copy,
+    R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Rpc: Rpc<A, Args, R>;
+    type Rpc: Rpc<A, F, Args, R>;
 
     /// Set the queue depth of the remote procedure.
     fn with_queue_depth(self, queue_depth: usize) -> Self;
