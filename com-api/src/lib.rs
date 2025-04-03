@@ -1,44 +1,56 @@
-/// # API Design principles
-///
-/// - We stick to the builder pattern down to a single service
-/// - We make all elements mockable. This means we provide traits for the building blocks.
-///   We strive for enabling trait objects for mockable entities.
-/// - We allow for the usage of heap memory during initialization phase (offer, connect, ...)
-///   but prevent heap memory usage during the running phase. Any allocations during the run phase
-///   must happen on preallocated memory chunks.
-/// - We support data provision on potentially uninitialized memory for efficiency reasons.
-/// - We want to be type safe by deriving as much type information as possible from the interface
-///   description.
-/// - We want to design interfaces such that they're hard to misuse.
-/// - Data communicated over IPC need to be position independent.
-/// - Data may not reference other data outside its provinence
-/// - We provide simple defaults for customization points
-/// - Sending / receiving / calling is always done explicitly.
-/// - COM API does not enforce the necessity for internal threads or executors.
-///
-/// # Lower layer implementation principles
-///
-/// - We add safety nets to detect ABI incompatibilities
-///
-/// # Supported IPC ABI
-///
-/// - Primitives
-/// - Static lists / strings
-/// - Dynamic lists / strings
-/// - Key-value
-/// - Structures
-/// - Tuples
+// Copyright (c) 2025 Contributors to the Eclipse Foundation
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// <https://www.apache.org/licenses/LICENSE-2.0>
+//
+// SPDX-License-Identifier: Apache-2.0
 
-use std::path::Path;
-use std::ops::{Deref, DerefMut};
+//! # API Design principles
+//!
+//! - We stick to the builder pattern down to a single service
+//! - We make all elements mockable. This means we provide traits for the building blocks.
+//!   We strive for enabling trait objects for mockable entities.
+//! - We allow for the allocation of heap memory during initialization phase (offer, connect, ...)
+//!   but prevent heap memory usage during the running phase. Any heap memory allocations during the
+//!   run phase must happen on preallocated memory chunks.
+//! - We support data provision on potentially uninitialized memory for efficiency reasons.
+//! - We want to be type safe by deriving as much type information as possible from the interface
+//!   description.
+//! - We want to design interfaces such that they're hard to misuse.
+//! - Data communicated over IPC need to be position independent.
+//! - Data may not reference other data outside its provenance.
+//! - We provide simple defaults for customization points.
+//! - Sending / receiving / calling is always done explicitly.
+//! - COM API does not enforce the necessity for internal threads or executors.
+//!
+//! # Lower layer implementation principles
+//!
+//! - We add safety nets to detect ABI incompatibilities
+//!
+//! # Supported IPC ABI
+//!
+//! - Primitives
+//! - Static lists / strings
+//! - Dynamic lists / strings
+//! - Key-value
+//! - Structures
+//! - Tuples
+
+use std::fmt::Debug;
 use std::mem::MaybeUninit;
+use std::ops::{Deref, DerefMut};
+use std::path::Path;
 
 #[derive(Debug)]
-enum Error {
-    Fail
+pub enum Error {
+    Fail,
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait Builder {
     type Output;
@@ -46,346 +58,141 @@ pub trait Builder {
     fn build(self) -> Self::Output;
 }
 
-use variante2::*;
-
+/// This represents the com implementation and acts as a root for all types and objects provided by
+/// the implementation.
 pub trait Runtime {}
 
-pub trait RuntimeBuilder: Builder where Builder::Output: Runtime {
+pub trait RuntimeBuilder: Builder
+where
+    <Self as Builder>::Output: Runtime,
+{
     fn load_config(&mut self, config: &Path) -> &mut Self;
 }
 
-pub struct RuntimeBuilderImpl {}
+/// This trait shall ensure that we can safely use an instance of the implementing type across
+/// address boundaries. This property may be violated by the following circumstances:
+/// - usage of pointers to other members of the struct itself (akin to !Unpin structs)
+/// - usage of Rust pointers or references to other data
+///
+/// This can be trivially achieved by not using any sort of reference. In case a reference (either
+/// to self or to other data) is required, the following options exist:
+/// - Use indices into other data members of the same structure
+/// - Use offset pointers _to the same memory chunk_ that point to different (external) data
+///
+/// # Safety
+///
+/// Since it is yet to be proven whether this trait can be implemented safely (assumption is: no) it
+/// is unsafe for now. The expectation is that very few users ever need to implement this manually.
+pub unsafe trait Reloc {}
 
-impl Builder for RuntimeBuilderImpl {
-    type Output = ();
-    fn build(self) -> Self::Output { unimplemented!() }
+unsafe impl Reloc for () {}
+unsafe impl Reloc for u32 {}
+
+/// A `Sample` provides a reference to a memory buffer of an event with immutable value.
+///
+/// By implementing the `Deref` trait implementations of the trait support the `.` operator for dereferencing.
+/// The buffers with its data lives as long as there are references to it existing in the framework.
+pub trait Sample<T>: Deref<Target = T> + Send
+where
+    T: Send + Reloc,
+{
 }
 
-impl RuntimeBuilder for RuntimeBuilderImpl {
-    fn load_config(&mut self, config: &Path) -> &mut Self { unimplemented!() }
+/// A `SampleMut` provides a reference to a memory buffer of an event with mutable value.
+///
+/// By implementing the `DerefMut` trait implementations of the trait support the `.` operator for dereferencing.
+/// The buffers with its data lives as long as there are references to it existing in the framework.
+pub trait SampleMut<T>: DerefMut<Target = T>
+where
+    T: Send + Reloc,
+{
+    /// The associated read-only sample type.
+    type Sample: Sample<T>;
+
+    /// Consume the sample into an immutable sample.
+    fn into_sample(self) -> Self::Sample;
+
+    /// Send the sample and consume it.
+    fn send(self) -> Result<()>;
 }
 
-impl RuntimeBuilderImpl {
-    pub fn new() -> Self { unimplemented!() }
+/// A `SampleMaybeUninit` provides a reference to a memory buffer of an event with a `MaybeUninit` value.
+///
+/// Utilizing `DerefMut` on the buffer reveals a reference to the internal `MaybeUninit<T>`.
+/// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns a `SampleMut`.
+/// The buffers with its data lives as long as there are references to it existing in the framework.
+pub trait SampleMaybeUninit<T>: DerefMut<Target = MaybeUninit<T>>
+where
+    T: Send + Reloc,
+{
+    /// Buffer type for mutable data after initialization
+    type SampleMut: SampleMut<T>;
+
+    /// Write a value into the buffer and render it initialized.
+    ///
+    /// This corresponds to `MaybeUninit::write`.
+    fn write(self, value: T) -> Self::SampleMut;
+
+    /// Render the buffer initialized for mutable access.
+    ///
+    /// This corresponds to `MaybeUninit::assume_init`.
+    ///
+    /// # Safety
+    ///
+    /// The caller has to make sure to initialize the data in the buffer before calling this method.
+    unsafe fn assume_init(self) -> Self::SampleMut;
 }
 
-/// Determines whether a type may be trivially moved without invalidating inner integrity
-trait Reloc {}
-
-impl Reloc for () {}
-impl Reloc for u32 {}
-
-mod variante1 {
-    /// Ideas / open questions:
-    /// - Do we need an additional type parameter for metadata? (E2E, timestamp, sender info)
-    trait Sample<T>: Deref<Target=T>
-    where
-        T: Reloc
-    {}
-
-    trait SampleMaybeUninit<T>: DerefMut<Target=MaybeUninit<T>>
-    where
-        T: Reloc
-    {
-        type Init: SampleMut<T>;
-
-        unsafe fn assume_init(self) -> Self::Init;
-        fn write(self, val: T) -> Self::Init;
-    }
-
-    trait SampleMut<T>: DerefMut<Target=T>
-    where
-        T: Reloc
-    {
-        fn send(self);
-    }
-
-    mod server {
-        trait Event<T> {
-            type SampleUninit<'a>: super::SampleMaybeUninit<T> + 'a;
-            fn allocate(&self) -> super::Result<Self::SampleUninit>;
-            fn send(&self, val: T);
-        }
-    }
-}
-
-mod variante2 {
-    use std::marker::PhantomData;
-    use std::mem::MaybeUninit;
-    use std::ops::{Deref, DerefMut};
-    use std::time::Duration;
-    use crate::Reloc;
-
-    struct LolaEvent<T> {
-        _event: PhantomData<T>,
-    }
-
-    struct LolaBinding<'a, T> {
-        data: *mut T,
-        event: &'a LolaEvent<T>,
-    }
-
-    enum SampleBinding<'a, T> {
-        Lola(LolaBinding<'a, T>),
-        Test(Box<T>)
-    }
-
-    pub struct Sample<'a, T> where T: Reloc {
-        inner: SampleBinding<'a, T>,
-    }
-
-    impl<'a, T> From<T> for Sample<'a, T> where T: Reloc {
-        fn from(value: T) -> Self {
-            Self { inner: SampleBinding::Test(Box::new(value)) }
-        }
-    }
-
-    impl<T> Deref for Sample<T> where T: Reloc {
-        type Target = T;
-
-        fn deref(&self) -> &Self::Target {
-            match &self.inner {
-                SampleBinding::Lola(_lola) => unimplemented!(),
-                SampleBinding::Test(test) => test.as_ref(),
-            }
-        }
-    }
-
-    pub struct SampleMut<'a, T> where T: Reloc {
-        data: T,
-    }
-
-    impl<'a, T> SampleMut<'a, T> where T: Reloc {
-        pub fn send(self) -> super::Result<()> {
-            unimplemented!()
-        }
-    }
-
-    impl<'a, T> Deref for SampleMut<'a, T> where T: Reloc {
-        type Target = T;
-
-        fn deref(&self) -> &Self::Target {
-            &self.data
-        }
-    }
-
-    impl<'a, T> DerefMut for SampleMut<'a, T> where T: Reloc {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.data
-        }
-    }
-
-    pub struct SampleMaybeUninit<'a, T> where T: Reloc {
-        data: MaybeUninit<T>,
-    }
-
-    impl<'a, T> SampleMaybeUninit<'a, T> where T: Reloc {
-        pub unsafe fn assume_init(self) -> SampleMut<'a, T> {
-            unsafe {
-                SampleMut {
-                    data: self.data.assume_init()
-                }
-            }
-        }
-
-        pub fn write(self, val: T) -> SampleMut<'a, T> {
-            SampleMut {
-                data: val
-            }
-        }
-
-        pub fn init_default(self) -> SampleMut<'a, T> where T: Default {
-            self.write(Default::default())
-        }
-    }
-
-    impl<'a, T> Deref for SampleMaybeUninit<'a, T> where T: Reloc {
-        type Target = MaybeUninit<T>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.data
-        }
-    }
-
-    impl<'a, T> DerefMut for SampleMaybeUninit<'a, T> where T: Reloc {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.data
-        }
-    }
-
-    pub trait Publisher {
-        type Payload: Reloc;
-        fn allocate(&self) -> super::Result<SampleMaybeUninit<Self::Payload>>;
-        fn send(&self, val: Self::Payload) -> super::Result<()>;
-    }
-
-    pub enum WaitResult {
-        SamplesAvailable,
-        Expired,
-    }
-
-    pub trait Subscriber {
-        type Payload: Reloc;
-        fn next(&self) -> super::Result<Option<Sample<Self::Payload>>>;
-        fn wait(&self, timeout: Option<Duration>) -> WaitResult;
-    }
-
-    mod test {
-        use super::*;
-
-        struct TestPublisher<T> {}
-
-        impl<T> TestPublisher<T> where T: Reloc {
-            pub fn new() -> TestPublisher<T> {
-                Self {}
-            }
-        }
-
-        impl<T> Publisher for TestPublisher<T> where T: Reloc {
-            type Payload = T;
-
-            fn allocate(&self) -> crate::Result<SampleMaybeUninit<T>> {
-                Ok(SampleMaybeUninit { data: MaybeUninit::uninit() })
-            }
-
-            fn send(&self, val: T) -> crate::Result<()> {
-                Ok(())
-            }
-        }
-
-        struct TestSubscriber<T> {}
-
-        impl<T> TestSubscriber<T> where T: Reloc {
-            pub fn new() -> Self { Self {} }
-        }
-
-        impl<T> Subscriber for TestSubscriber<T> where T: Reloc {
-            type Payload = T;
-
-            fn next(&self) -> crate::Result<Option<Sample<Self::Payload>>> {
-                Ok(Some(Sample { inner: SampleBinding::Test(Box::new(42)) }))
-            }
-
-            fn wait(&self, timeout: Option<Duration>) -> WaitResult {
-                WaitResult::SamplesAvailable
-            }
-        }
-
-        #[test]
-        fn receive_stuff() {
-            let test_subscriber = TestSubscriber::new();
-            for _ in 0..10 {
-                match test_subscriber.wait(Some(Duration::from_secs(5))) {
-                    WaitResult::SamplesAvailable => {
-                        let sample = test_subscriber.next();
-                        println!("{}", *sample);
-                    }
-                    WaitResult::Expired => println!("No sample received"),
-                }
-            }
-        }
-
-        #[test]
-        fn send_stuff() {
-            let test_publisher = TestPublisher::new();
-            for _ in 0..5 {
-                let sample = test_publisher.allocate();
-                match sample {
-                    Ok(mut sample) => {
-                        let init_sample = unsafe {
-                            *sample.as_mut_ptr() = 42u32;
-                            sample.assume_init()
-                        };
-                        assert!(init_sample.send().is_ok());
-                    }
-                    Err(e) => eprintln!("Oh my! {:?}", e),
-                }
-            }
-        }
-    }
-}
-
-mod variant_3 {
-    trait Adapter {
-        type Event<T> : super::Event<T> where T: Reloc;
-    }
-
-
-    struct MyInterface<A: Adapter> {
-        my_a: A::Event<u32>,
-        my_b: A::Event<u32>,
-    }
-
-    impl<A: Adapter> Interface for MyInterface<Adapter> {
-    }
-
-    trait Proxy<A: Adapter, I: Interface> {}
-
-
-    struct MyProxy<A: Adapter, I: Interface> {
-        my_a: MyInterface<A>::Event<u32>::Subscriber,
-        my_b: MyInterface<A>::Event<u32>::Subscriber,
-    }
-
-    impl<A: Adapter> Proxy<A, MyInterface<A>> for MyProxy<A, MyInterface<A>> {
-    }
-
-    trait Skeleton<A: Adapter, I: Interface> {}
-
-    struct MySkeleton<A: Adapter, I: Interface> {
-        my_a: MyInterface<A>::Event<u32>::Publisher,
-        my_b: MyInterface<A>::Event<u32>::Publisher,
-    }
-
-    fn business_logic(proxy: MyProxy<DynAdapter>) {
-
-    }
-
-    fn test() {
-        let test_adapter = Box::new(TestAdapter) as Box<dyn Adapter>;
-    }
-}
-
-/// interface Camera {
-///     num_cars: u32
-/// }
-
+mod sample_impl;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod test {
+    use super::{Builder, SampleMaybeUninit, SampleMut};
+    use std::time::Duration;
 
+    #[test]
+    fn receive_stuff() {
+        let test_subscriber = crate::sample_impl::Subscriber::<u32>::new();
+        for _ in 0..10 {
+            match test_subscriber.wait(Some(Duration::from_secs(5))) {
+                crate::sample_impl::WaitResult::SamplesAvailable => match test_subscriber.next() {
+                    Ok(Some(sample)) => println!("{}", *sample),
+                    Ok(None) => println!("Nothing"),
+                    Err(e) => eprintln!("{:?}", e),
+                },
+                crate::sample_impl::WaitResult::Expired => println!("No sample received"),
+            }
+        }
+    }
+
+    #[test]
+    fn send_stuff() {
+        let test_publisher = crate::sample_impl::Publisher::new();
+        for _ in 0..5 {
+            let sample = test_publisher.allocate();
+            match sample {
+                Ok(mut sample) => {
+                    let init_sample = unsafe {
+                        *sample.as_mut_ptr() = 42u32;
+                        sample.assume_init()
+                    };
+                    assert!(init_sample.send().is_ok());
+                }
+                Err(e) => eprintln!("Oh my! {:?}", e),
+            }
+        }
+    }
 
     fn is_sync<T: Sync>(_val: T) {}
 
     #[test]
     fn builder_is_sync() {
-        is_sync(RuntimeBuilderImpl::new());
+        is_sync(crate::sample_impl::RuntimeBuilderImpl::new());
     }
 
     #[test]
     fn build_production_runtime() {
-        let runtime_builder = RuntimeBuilderImpl::new();
-        let runtime = runtime_builder.build();
-    }
-
-    impl Reloc for u32 {}
-    struct TestUninitPtr {}
-
-    impl SampleMaybeUninit<u32> for TestUninitPtr {
-        type Init = ();
-
-        unsafe fn assume_init(self) -> Self::Init {
-
-        }
-
-        fn write(self, val: u32) -> Self::Init {
-            todo!()
-        }
-    }
-
-    #[test]
-    fn use_uninit_ptr() {
-
+        let runtime_builder = crate::sample_impl::RuntimeBuilderImpl::new();
+        let _runtime = runtime_builder.build();
     }
 }

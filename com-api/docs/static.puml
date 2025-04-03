@@ -1,5 +1,16 @@
 @startuml
 
+' Copyright (c) 2025 Contributors to the Eclipse Foundation
+'
+' See the NOTICE file(s) distributed with this work for additional
+' information regarding copyright ownership.
+'
+' This program and the accompanying materials are made available under the
+' terms of the Apache License Version 2.0 which is available at
+' <https://www.apache.org/licenses/LICENSE-2.0>
+'
+' SPDX-License-Identifier: Apache-2.0
+
 interface Builder {
     type Output
     build() : Self::Output
@@ -9,33 +20,35 @@ interface Builder {
 interface Runtime
 
 Interface RuntimeBuilder {
-    type Output: Runtime
     load_config(&mut self, config: &Path): &mut Self
     build(self): Self::Runtime
 }
 
-Builder <|-- RuntimeBuilder
+Builder <|-- RuntimeBuilder : Builder::Output: Runtime
 RuntimeBuilder ..> Runtime : builds
 
 interface Deref
 interface DerefMut
 Deref <|-- DerefMut
 
-class Sample<T>
-Deref <|-- Sample : Target=T
+interface Sample<T>
+Deref <|-- Sample : Deref::Target=T
 
-class SampleMut<T> {
+interface SampleMut<T> {
+    type Sample: Sample<T>
+    into_sample(self) : Sample
     send(self) : Result
 }
-DerefMut <|-- SampleMut : Target=T
+DerefMut <|-- SampleMut : Deref::Target=T
 
-class SampleMaybeUninit<T> {
+interface SampleMaybeUninit<T> {
+    type SampleMut: SampleMut<T>
     assume_init(self) : SampleMut
     write(self, data) : SampleMut
-    init_default(self) : SampleMut for T: Default
+    as_mut_ptr(&mut self) : *mut T
 }
-DerefMut <|-- SampleMaybeUninit : Target=MaybeUninit<T>
 
 SampleMaybeUninit ..> SampleMut : builds
+Sample <.. SampleMut : builds
 
 @enduml
