@@ -6,14 +6,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use qor_core::prelude::*;
 use super::Local;
+use qor_core::prelude::*;
 
-use crate::base::remote_procedure::{
-    Invoked, Invoker, PendingRequest, Rpc, RpcBuilder, Request,
-    RequestMaybeUninit, RequestMut, Response, ResponseMaybeUninit, ResponseMut,
-};
 use crate::base::*;
+use crate::concepts::*;
 
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
@@ -21,9 +18,9 @@ use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::Mutex;
-use std::sync::Arc;
 
 //
 // Rpc
@@ -38,7 +35,7 @@ type PendingQueue<F, Args, R> = Arc<(
 // #[derive(Debug)]
 struct LocalRequestState<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -61,7 +58,7 @@ where
 
 unsafe impl<F, Args, R> Send for LocalRequestState<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -69,7 +66,7 @@ where
 
 unsafe impl<F, Args, R> Sync for LocalRequestState<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -77,7 +74,7 @@ where
 
 impl<F, Args, R> LocalRequestState<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -98,7 +95,7 @@ where
 // #[derive(Debug)]
 pub struct LocalRequestMaybeUninit<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -110,7 +107,7 @@ where
 
 impl<F, Args, R> LocalRequestMaybeUninit<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -125,9 +122,9 @@ where
     }
 }
 
-impl<F, Args, R> RequestMaybeUninit<Local, F, Args, R> for LocalRequestMaybeUninit<F, Args, R>
+impl<F, Args, R> RequestMaybeUninitConcept<Local, F, Args, R> for LocalRequestMaybeUninit<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -157,7 +154,7 @@ where
 // #[derive(Debug)]
 pub struct LocalRequestMut<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -167,7 +164,7 @@ where
 
 impl<F, Args, R> Deref for LocalRequestMut<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -187,7 +184,7 @@ where
 
 impl<F, Args, R> DerefMut for LocalRequestMut<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -203,9 +200,9 @@ where
     }
 }
 
-impl<F, Args, R> RequestMut<Local, F, Args, R> for LocalRequestMut<F, Args, R>
+impl<F, Args, R> RequestMutConcept<Local, F, Args, R> for LocalRequestMut<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -234,7 +231,7 @@ where
 // #[derive(Debug)]
 pub struct LocalPendingRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -243,22 +240,22 @@ where
 
 unsafe impl<F, Args, R> Send for LocalPendingRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 unsafe impl<F, Args, R> Sync for LocalPendingRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<F, Args, R> PendingRequest<Local, F, Args, R> for LocalPendingRequest<F, Args, R>
+impl<F, Args, R> PendingRequestConcept<Local, F, Args, R> for LocalPendingRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -383,7 +380,7 @@ where
 
 pub struct LocalRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -392,14 +389,14 @@ where
 
 unsafe impl<F, Args, R> Send for LocalRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 unsafe impl<F, Args, R> Sync for LocalRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -407,7 +404,7 @@ where
 
 impl<F, Args, R> Deref for LocalRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -426,9 +423,9 @@ where
     }
 }
 
-impl<F, Args, R> Request<Local, F, Args, R> for LocalRequest<F, Args, R>
+impl<F, Args, R> RequestConcept<Local, F, Args, R> for LocalRequest<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -443,16 +440,16 @@ where
 
 pub struct LocalResponseMaybeUninit<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
     inner: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-impl<F, Args, R> ResponseMaybeUninit<Local, F, Args, R> for LocalResponseMaybeUninit<F, Args, R>
+impl<F, Args, R> ResponseMaybeUninitConcept<Local, F, Args, R> for LocalResponseMaybeUninit<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -479,7 +476,7 @@ where
 // #[derive(Debug)]
 pub struct LocalResponseMut<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -488,7 +485,7 @@ where
 
 impl<F, Args, R> Deref for LocalResponseMut<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -507,7 +504,7 @@ where
 }
 impl<F, Args, R> DerefMut for LocalResponseMut<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -524,9 +521,9 @@ where
     }
 }
 
-impl<F, Args, R> ResponseMut<Local, F, Args, R> for LocalResponseMut<F, Args, R>
+impl<F, Args, R> ResponseMutConcept<Local, F, Args, R> for LocalResponseMut<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -552,7 +549,7 @@ where
 // #[derive(Debug)]
 pub struct LocalResponse<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -561,7 +558,7 @@ where
 
 impl<F, Args, R> Deref for LocalResponse<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -580,9 +577,9 @@ where
     }
 }
 
-impl<F, Args, R> Response<Local, F, Args, R> for LocalResponse<F, Args, R>
+impl<F, Args, R> ResponseConcept<Local, F, Args, R> for LocalResponse<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -591,7 +588,7 @@ where
 // #[derive(Debug)]
 pub struct LocalInvoker<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -600,7 +597,7 @@ where
 
 unsafe impl<F, Args, R> Send for LocalInvoker<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -608,15 +605,15 @@ where
 
 unsafe impl<F, Args, R> Sync for LocalInvoker<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<F, Args, R> Invoker<Local, F, Args, R> for LocalInvoker<F, Args, R>
+impl<F, Args, R> InvokerConcept<Local, F, Args, R> for LocalInvoker<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -642,7 +639,7 @@ where
 // #[derive(Debug)]
 pub struct LocalInvoked<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -651,22 +648,22 @@ where
 
 unsafe impl<F, Args, R> Send for LocalInvoked<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 unsafe impl<F, Args, R> Sync for LocalInvoked<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
 
-impl<F, Args, R> Invoked<Local, F, Args, R> for LocalInvoked<F, Args, R>
+impl<F, Args, R> InvokedConcept<Local, F, Args, R> for LocalInvoked<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -742,7 +739,7 @@ where
 // #[derive(Debug)]
 pub struct LocalRpc<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -751,7 +748,7 @@ where
 
 unsafe impl<F, Args, R> Send for LocalRpc<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -759,7 +756,7 @@ where
 
 unsafe impl<F, Args, R> Sync for LocalRpc<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -767,7 +764,7 @@ where
 
 impl<F, Args, R> Clone for LocalRpc<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -778,9 +775,9 @@ where
     }
 }
 
-impl<F, Args, R> Rpc<Local, F, Args, R> for LocalRpc<F, Args, R>
+impl<F, Args, R> RpcConcept<Local, F, Args, R> for LocalRpc<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -802,7 +799,7 @@ where
 
 impl<F, Args, R> LocalRpc<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -816,7 +813,7 @@ where
 
 pub struct LocalRpcBuilder<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -829,7 +826,7 @@ where
 
 impl<F, Args, R> LocalRpcBuilder<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
@@ -844,9 +841,9 @@ where
     }
 }
 
-impl<F, Args, R> RpcBuilder<Local, F, Args, R> for LocalRpcBuilder<F, Args, R>
+impl<F, Args, R> RpcBuilderConcept<Local, F, Args, R> for LocalRpcBuilder<F, Args, R>
 where
-    F: Fn(Args)->R,
+    F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {

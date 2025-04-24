@@ -6,8 +6,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::base::*;
 use qor_core::prelude::*;
+
+use crate::concepts::*;
 
 use std::fmt::Debug;
 
@@ -16,15 +17,15 @@ mod signal;
 #[cfg(feature = "signals_supported")]
 pub use signal::*;
 
-#[cfg(feature = "events_supported")]
-mod event;
-#[cfg(feature = "events_supported")]
-pub use event::*;
+#[cfg(feature = "topics_supported")]
+mod topic;
+#[cfg(feature = "topics_supported")]
+pub use topic::*;
 
 #[cfg(feature = "rpcs_supported")]
-mod remote_procedure;
+mod rpc;
 #[cfg(feature = "rpcs_supported")]
-pub use remote_procedure::*;
+pub use rpc::*;
 
 #[cfg(feature = "dynamic_adapter")]
 use super::dynamic::{Dynamic, DynamicNew};
@@ -36,7 +37,7 @@ use super::dynamic::{Dynamic, DynamicNew};
 #[derive(Debug)]
 pub struct LocalStaticConfig {}
 
-impl StaticConfig<Local> for LocalStaticConfig {
+impl adapter::StaticConfigConcept<Local> for LocalStaticConfig {
     #[inline(always)]
     fn name() -> &'static str {
         "LocalAdapter"
@@ -65,7 +66,7 @@ impl Local {
     }
 }
 
-impl Adapter for Local {
+impl adapter::AdapterConcept for Local {
     type StaticConfig = LocalStaticConfig;
 
     fn static_config(&self) -> &'static Self::StaticConfig {
@@ -73,13 +74,13 @@ impl Adapter for Local {
     }
 }
 
-impl TransportAdapter for Local {
+impl adapter::TransportAdapterConcept for Local {
     #[cfg(feature = "signals_supported")]
-    type SignalBuilder = LocalSignalBuilder;
+    type SignalBuilder = LocalEventBuilder;
 
-    #[cfg(feature = "events_supported")]
-    type EventBuilder<T>
-        = LocalEventBuilder<T>
+    #[cfg(feature = "topics_supported")]
+    type TopicBuilder<T>
+        = LocalTopicBuilder<T>
     where
         T: Debug + Send + TypeTag + Coherent + Reloc;
 
@@ -94,16 +95,16 @@ impl TransportAdapter for Local {
     /// Create a new event on the local heap
     #[cfg(feature = "signals_supported")]
     fn signal_builder(&self, _label: Label) -> Self::SignalBuilder {
-        LocalSignalBuilder::new()
+        LocalEventBuilder::new()
     }
 
     /// Create a new topic on the local heap
-    #[cfg(feature = "events_supported")]
-    fn event_builder<T>(&self, _label: Label) -> Self::EventBuilder<T>
+    #[cfg(feature = "topics_supported")]
+    fn topic_builder<T>(&self, _label: Label) -> Self::TopicBuilder<T>
     where
         T: TypeTag + Coherent + Reloc + Send + Debug,
     {
-        LocalEventBuilder::new()
+        LocalTopicBuilder::new()
     }
 
     /// Create a new remote_procedure_call on the local heap
@@ -127,12 +128,11 @@ impl IntoDynamic<Local> for Local {
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use crate::base::*;
+    
     use std::{thread, time::Duration};
     use tracing::{info, span, Level};
-
-    use crate::base::remote_procedure::PendingRequest;
-
-    use super::*;
 
     #[test]
     fn trace_init() {
@@ -141,55 +141,55 @@ mod test {
 
     #[test]
     #[cfg(feature = "signals_supported")]
-    fn test_local_signal_mt() {
+    fn test_local_event_mt() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
         static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
 
-        let signal = ADAPTER.signal_builder(Label::INVALID).build().unwrap();
+        let event = ADAPTER.signal_builder(Label::INVALID).build().unwrap();
 
-        let emitter = signal.emitter().unwrap();
+        let emitter = event.emitter().unwrap();
         let handle_notifier = std::thread::spawn(move || {
-            let span = span!(Level::INFO, "[Local] thread_proc_notify");
+            let span = span!(Level::INFO, "[Local] thread_proc_emit");
             let _guard = span.enter();
 
-            info!("[Local] start notify");
+            info!("[Local] start emit");
             thread::sleep(Duration::from_millis(1000));
             info!("[Local] emitting notification");
             emitter.emit();
         });
 
-        let listener = signal.collector().unwrap();
-        let handle_listener = std::thread::spawn(move || {
-            let span = span!(Level::INFO, "[Local] thread_proc_listen");
+        let collector = event.collector().unwrap();
+        let handle_collector = std::thread::spawn(move || {
+            let span = span!(Level::INFO, "[Local] thread_proc_collect");
             let _guard = span.enter();
 
-            info!("[Local] start listen");
-            let result = listener.wait().unwrap();
+            info!("[Local] start collect");
+            let result = collector.wait().unwrap();
             info!("[Local] received notification");
             assert_eq!(result, true);
         });
 
         // wait for both threads
         handle_notifier.join().unwrap();
-        handle_listener.join().unwrap();
+        handle_collector.join().unwrap();
         info!("[Local] event threads joined");
     }
 
     #[test]
-    #[cfg(feature = "events_supported")]
-    fn test_local_event() {
+    #[cfg(feature = "signals_supported")]
+    fn test_local_topic() {
         let adapter = Local::new();
-        let event = adapter
-            .event_builder::<u32>(Label::INVALID)
+        let topic = adapter
+            .topic_builder::<u32>(Label::INVALID)
             .with_queue_depth(4)
             .build()
             .unwrap();
 
-        let publisher = event.publisher().unwrap();
-        let subscriber = event.subscriber().unwrap();
+        let publisher = topic.publisher().unwrap();
+        let subscriber = topic.subscriber().unwrap();
 
         let sample = publisher.loan(42).unwrap();
-        sample.send().unwrap();
+        sample.publish().unwrap();
 
         let sample = subscriber.try_receive().unwrap();
         assert_eq!(sample.is_some(), true);
@@ -198,26 +198,26 @@ mod test {
     }
 
     #[derive(Debug)]
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "topics_supported")]
     struct MyData {
         _a: u32,
         b: u32,
     }
 
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "topics_supported")]
     impl TypeTag for MyData {
         const TYPE_TAG: Tag = Tag::new(*b"MyData__");
     }
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "topics_supported")]
     impl Coherent for MyData {}
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "topics_supported")]
     unsafe impl Reloc for MyData {}
 
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "topics_supported")]
     type Payload = MyData;
 
-    #[cfg(feature = "events_supported")]
-    fn thread_proc_publish(event: impl Event<Local, Payload>) {
+    #[cfg(feature = "topics_supported")]
+    fn thread_proc_publish(event: crate::types::Topic<Local, Payload>) {
         let span = span!(Level::INFO, "[Local] thread_proc_publish");
         let _guard = span.enter();
 
@@ -229,12 +229,12 @@ mod test {
 
         for i in 0..4 {
             let sample = publisher.loan(Payload { _a: 42, b: i }).unwrap();
-            sample.send().unwrap();
+            sample.publish().unwrap();
         }
     }
 
-    #[cfg(feature = "events_supported")]
-    fn thread_proc_subscribe(event: impl Event<Local, Payload>) -> ComResult<u32> {
+    #[cfg(feature = "topics_supported")]
+    fn thread_proc_subscribe(event: crate::types::Topic<Local, Payload>) -> ComResult<u32> {
         let span = span!(Level::INFO, "[Local] thread_proc_subscribe");
         let _guard = span.enter();
 
@@ -252,22 +252,22 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "events_supported")]
-    fn test_local_event_mt() {
+    #[cfg(feature = "topics_supported")]
+    fn test_local_topic_mt() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
         static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
 
-        let event = ADAPTER
-            .event_builder::<Payload>(Label::INVALID)
+        let topic = ADAPTER
+            .topic_builder::<Payload>(Label::INVALID)
             .with_queue_depth(4)
             .build()
             .unwrap();
 
-        let event_clone = event.clone();
-        let handle_publisher = std::thread::spawn(move || thread_proc_publish(event_clone));
+        let topic_clone = topic.clone();
+        let handle_publisher = std::thread::spawn(move || thread_proc_publish(topic_clone));
 
-        let event_clone = event.clone();
-        let handle_subscriber = std::thread::spawn(move || thread_proc_subscribe(event_clone));
+        let topic_clone = topic.clone();
+        let handle_subscriber = std::thread::spawn(move || thread_proc_subscribe(topic_clone));
 
         // wait for both threads
         handle_publisher.join().unwrap();

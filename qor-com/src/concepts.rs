@@ -9,7 +9,7 @@
 //!
 //! # Overview
 //!
-//! The base module defines the basic types and traits used in the qor-com stack.
+//! The concepts module defines the basic traits used in the qor-com stack.
 //!
 //! # Concepts
 //!
@@ -30,14 +30,14 @@
 //! The transport adapter provides methods to
 //! produce builders for the different communication patterns:
 //!
-//! - signal
 //! - Event
+//! - Topic
 //! - Remote Procedure
 //!
 //! Each of the elements can produce a sending and a receiving part.
 //!
-//! - signal: Notifier and Listener
-//! - Event: Publisher and Subscriber
+//! - Event: Emitter and Receiver
+//! - Topic: Publisher and Subscriber
 //! - Remote Procedure: Invoker and Invokee
 //!
 //! ## API elements
@@ -62,41 +62,37 @@
 //!  
 
 use qor_core::prelude::*;
-
-use std::error::Error;
-use std::fmt::Debug;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ComError {
-    LockError,
-    Timeout,
-    QueueEmpty,
-    QueueFull,
-    FanError,
-    StateError,
-    ResponseConsumed,
-}
-
-impl std::fmt::Display for ComError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Com: {:?}", self)
-    }
-}
-
-impl Error for ComError {}
-
-/// Communication module result type
-pub type ComResult<T> = std::result::Result<T, ComError>;
+use super::base::*;
 
 ////////////////////////////////////////////////////////////////
 //
-// Data elements
+// Information elements
 //
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum QueuePolicy {
-    OverwriteOldest,
-    OverwriteNewest,
-    ErrorOnFull,
-}
 
+#[cfg(feature = "signals_supported")]
+pub mod signal;
+#[cfg(feature = "signals_supported")]
+pub use signal::*;
 
+#[cfg(feature = "variables_supported")]
+pub mod variable;
+#[cfg(feature = "variables_supported")]
+pub use variable::*;
+
+#[cfg(feature = "topics_supported")]
+pub mod topic;
+#[cfg(feature = "topics_supported")]
+pub use topic::*;
+
+#[cfg(feature = "fire_and_forget_supported")]
+pub mod fire_and_forget;
+#[cfg(feature = "fire_and_forget_supported")]
+pub use fire_and_forget::*;
+
+#[cfg(feature = "rpcs_supported")]
+pub mod rpc;
+#[cfg(feature = "rpcs_supported")]
+pub use rpc::*;
+
+pub mod adapter;
+pub use adapter::*;

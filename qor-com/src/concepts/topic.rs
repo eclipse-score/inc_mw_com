@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use adapter::TransportAdapterConcept;
 
 use std::{
     fmt::Debug,
@@ -18,48 +19,48 @@ use std::{
 ////////////////////////////////////////////////////////////////
 // Event: Pub/Sub Messaging Pattern
 
-/// A `Sample` provides a reference to a memory buffer of an event with immutable value.
+/// A `Sample` provides a reference to a memory buffer of an topic with immutable value.
 ///
 /// By implementing the `Deref` trait implementations of the trait support the `.` operator for dereferencing.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait Sample<A, T>: Debug + Deref<Target = T> + Send
+pub trait SampleConcept<A, T>: Debug + Deref<Target = T> + Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
 }
 
-/// A `SampleMut` provides a reference to a memory buffer of an event with mutable value.
+/// A `SampleMut` provides a reference to a memory buffer of an topic with mutable value.
 ///
 /// By implementing the `DerefMut` trait implementations of the trait support the `.` operator for dereferencing.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait SampleMut<A, T>: Debug + DerefMut<Target = T>
+pub trait SampleMutConcept<A, T>: Debug + DerefMut<Target = T>
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
     /// The associated read-only sample type.
-    type Sample: Sample<A, T>;
+    type Sample: SampleConcept<A, T>;
 
     /// Consume the sample into an immutable sample.
     fn into_sample(self) -> Self::Sample;
 
     /// Send the sample and consume it.
-    fn send(self) -> ComResult<()>;
+    fn publish(self) -> ComResult<()>;
 }
 
-/// A `SampleMaybeUninit` provides a reference to a memory buffer of an event with a `MaybeUninit` value.
+/// A `SampleMaybeUninit` provides a reference to a memory buffer of an topic with a `MaybeUninit` value.
 ///
 /// Utilizing `DerefMut` on the buffer reveals a reference to the internal `MaybeUninit<T>`.
 /// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns a `SampleMut`.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait SampleMaybeUninit<A, T>: Debug
+pub trait SampleMaybeUninitConcept<A, T>: Debug
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
     /// Buffer type for mutable data after initialization
-    type SampleMut: SampleMut<A, T>;
+    type SampleMut: SampleMutConcept<A, T>;
 
     /// Write a value into the buffer and render it initialized.
     ///
@@ -84,17 +85,17 @@ where
     unsafe fn assume_init(self) -> Self::SampleMut;
 }
 
-/// The `Publisher` represents a publisher to a event.
+/// The `Publisher` represents a publisher to a topic.
 ///
 /// The publishing application obtains instances implementing this trait through
-/// events created by a transport adapter.
-pub trait Publisher<A, T>: Debug + Send
+/// topics created by a transport adapter.
+pub trait PublisherConcept<A, T>: Debug + Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
     /// The type of the uninitialized buffer for new data to be published.
-    type SampleMaybeUninit: SampleMaybeUninit<A, T>;
+    type SampleMaybeUninit: SampleMaybeUninitConcept<A, T>;
 
     /// Loan an unitialized sample for new data to be published.
     ///
@@ -103,8 +104,8 @@ where
     /// ```rust
     /// let adapter = HeapAdapter::new();
     ///
-    /// let event = adapter.event::<u32>().build().unwrap();
-    /// let publisher = event.publisher().unwrap();
+    /// let topic = adapter.topic::<u32>().build().unwrap();
+    /// let publisher = topic.publisher().unwrap();
     ///
     /// let sample = publisher.sample_uninit().unwrap();
     /// let sample = sample.write(42);
@@ -124,8 +125,8 @@ where
     /// ```rust
     /// let adapter = HeapAdapter::new();
     ///
-    /// let event = adapter.event::<u32>().build().unwrap();
-    /// let publisher = event.publisher().unwrap();
+    /// let topic = adapter.topic::<u32>().build().unwrap();
+    /// let publisher = topic.publisher().unwrap();
     ///
     /// let sample = publisher.loan(42).unwrap();
     /// sample.send();
@@ -134,29 +135,29 @@ where
         &self,
         value: T,
     ) -> Result<
-        <<Self as Publisher<A, T>>::SampleMaybeUninit as SampleMaybeUninit<A, T>>::SampleMut,
+        <<Self as PublisherConcept<A, T>>::SampleMaybeUninit as SampleMaybeUninitConcept<A, T>>::SampleMut,
         ComError,
     > {
         let sample = self.loan_uninit()?;
         Ok(sample.write(value))
     }
 
-    /// Public new data as copy to the event.
+    /// Public new data as copy to the topic.
     ///
     /// This is a convenience function for quickly publishing new data.
     #[inline(always)]
     fn publish(&self, value: T) -> ComResult<()> {
-        self.loan(value)?.send()
+        self.loan(value)?.publish()
     }
 }
 
-/// The `Subscriber` trait represents the receiving end of published data on a event.
-pub trait Subscriber<A, T>: Debug + Send
+/// The `Subscriber` trait represents the receiving end of published data on a topic.
+pub trait SubscriberConcept<A, T>: Debug + Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    type Sample: Sample<A, T>;
+    type Sample: SampleConcept<A, T>;
 
     /// Check for new data and consume it if present.
     fn try_receive(&self) -> ComResult<Option<Self::Sample>>;
@@ -185,52 +186,53 @@ where
     ) -> impl Future<Output = ComResult<Self::Sample>>;
 }
 
-/// The `Event` trait references to the implementation of a event in the underlying transport framework.
+/// The `Topic` trait references to the implementation of a topic in the underlying transport framework.
 ///
-/// A event can only be created through the `event` method of the corresponding transport adapter.
-/// The publishers and subscribers can be obtained through the events `publisher` and `subscriber` methods, respectively.
+/// A topic can only be created through the `topic` method of the corresponding transport adapter.
+/// The publishers and subscribers can be obtained through the topics `publisher` and `subscriber` methods, respectively.
 ///
-pub trait Event<A, T>: Debug + Clone + Send
+pub trait TopicConcept<A, T>: Debug + Clone + Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    type Publisher: Publisher<A, T>;
-    type Subscriber: Subscriber<A, T>;
+    type Publisher: PublisherConcept<A, T>;
+    type Subscriber: SubscriberConcept<A, T>;
 
-    /// Get a publisher for this event
+    /// Get a publisher for this topic
     ///
-    /// The method succees if the event still accepts new publishers.
-    /// The fan-in of a event is limited by the configuration given to the builder when creating the event.
+    /// The method succees if the topic still accepts new publishers.
+    /// The fan-in of a topic is limited by the configuration given to the builder when creating the topic.
     fn publisher(&self) -> ComResult<Self::Publisher>;
 
-    /// Get a subscriber for this event
+    /// Get a subscriber for this topic
     ///
-    /// The method succeeds if the event still accepts new subscribers.
-    /// The fan-out of a event is limited by the configuration given to the builder when creating the event.    
+    /// The method succeeds if the topic still accepts new subscribers.
+    /// The fan-out of a topic is limited by the configuration given to the builder when creating the topic.    
     fn subscriber(&self) -> ComResult<Self::Subscriber>;
 }
 
 /// The Builder for a `Event`
-pub trait EventBuilder<A, T>: Debug
+pub trait TopicBuilderConcept<A, T>: Debug
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     T: TypeTag + Coherent + Reloc + Send + Debug,
 {
-    type Event: Event<A, T>;
+    type Topic: TopicConcept<A, T>;
 
-    /// Set the queue depth of the event.
+    /// Set the queue depth of the topic.
     fn with_queue_depth(self, queue_depth: usize) -> Self;
 
-    /// Set the queue policy of the event.
+    /// Set the queue policy of the topic.
     fn with_queue_policy(self, queue_policy: QueuePolicy) -> Self;
 
-    /// Set the fan-in of the event which limits the number of publishers.
+    /// Set the fan-in of the topic which limits the number of publishers.
     fn with_max_fan_in(self, fan_in: usize) -> Self;
 
-    /// Set the fan-out of the event which limits the number of subscribers.
+    /// Set the fan-out of the topic which limits the number of subscribers.
     fn with_max_fan_out(self, fan_out: usize) -> Self;
 
-    /// Build the event
-    fn build(self) -> ComResult<Self::Event>;
+    /// Build the topic
+    fn build(self) -> ComResult<Self::Topic>;
 }
+

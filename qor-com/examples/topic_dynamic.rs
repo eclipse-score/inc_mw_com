@@ -24,29 +24,29 @@ const CYCLE_TIME: Duration = Duration::from_millis(100);
 
 #[derive(Debug)]
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 struct Payload {
     value: u32,
     arr: [u32; 8],
 }
 
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 impl TypeTag for Payload {
     const TYPE_TAG: Tag = Tag::new(*b"_Payload");
 }
 
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 impl Coherent for Payload {}
 
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 unsafe impl Reloc for Payload {}
 
 /// Here is our publisher thread with Dynamic Publisher in the type agnostic version using `impl Publisher<Dynamic, Payload>`
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 fn publisher_thread(
     stop_signal: Arc<(AtomicBool, Condvar)>,
     publisher: impl Publisher<Dynamic, Payload>,
@@ -84,7 +84,7 @@ fn publisher_thread(
 
 /// Here is our subscriber thread with Dynamic Subscriber in the type explicit version using `DynamicSubscriber<Payload>`
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 fn subscriber_thread(
     stop_signal: Arc<(AtomicBool, Condvar)>,
     subscriber: DynamicSubscriber<Payload>,
@@ -112,7 +112,7 @@ fn subscriber_thread(
 }
 
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // build the actual adapter
     let inner_adapter = adapter::local::Local::new();
@@ -125,14 +125,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let event = adapter.event::<Payload>(Label::new("DemoEvent")).build()?;
 
     // subscriber and thread
-    let subscriber = event.subscriber()?;
+    let subscriber = signal.subscriber()?;
     let stop_clone = stop_signal.clone();
     let subscribe = std::thread::spawn(move || {
         subscriber_thread(stop_clone, subscriber);
     });
 
     // publisher and thread
-    let publisher = event.publisher()?;
+    let publisher = signal.publisher()?;
     let stop_clone = stop_signal.clone();
     let publish = std::thread::spawn(move || {
         publisher_thread(stop_clone, publisher);
@@ -151,7 +151,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(not(feature = "events_supported"))]
+#[cfg(not(feature = "signals_supported"))]
 fn main() {
     println!("This example requires the `signals_supported` feature to be enabled")
 }
@@ -160,5 +160,3 @@ fn main() {
 fn main() {
     println!("This example requires the `dynamic_adapter` feature to be enabled")
 }
-
-

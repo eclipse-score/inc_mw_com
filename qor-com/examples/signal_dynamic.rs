@@ -109,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "dynamic_adapter")]
-#[cfg(not(feature = "events_supported"))]
+#[cfg(not(feature = "signals_supported"))]
 fn main() {
     println!("This example requires the `signals_supported` feature to be enabled")
 }

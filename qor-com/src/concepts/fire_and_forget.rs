@@ -19,7 +19,7 @@ use std::{
 // Remote Procedure Calls: Fire & Forget Messaging Pattern
 
 /// A `Notification` is a read-only fire-and-forget message received on the service side.
-pub trait Notification<A, Args>: Debug + Send + Deref<Target = Args>
+pub trait NotificationConcept<A, Args>: Debug + Send + Deref<Target = Args>
 where
     A: TransportAdapter + ?Sized,
     Args: Copy + Send,
@@ -27,7 +27,7 @@ where
 }
 
 /// A `NotificationMut` is a mutable fire-and-forget message used on the client side.
-pub trait NotificationMut<A, Args>: Debug + Send + DerefMut<Target = Args>
+pub trait NotificationMutConcept<A, Args>: Debug + Send + DerefMut<Target = Args>
 where
     A: TransportAdapter + ?Sized,
     Args: Copy + Send,
@@ -36,12 +36,12 @@ where
 }
 
 /// A `NotificationMaybeUninit` is an uninitialized fire-and-forget message used on the client side.
-pub trait NotificationMaybeUninit<A, Args>: Debug + Send
+pub trait NotificationMaybeUninitConcept<A, Args>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
     Args: Copy + Send,
 {
-    type NotificationMut: NotificationMut<A, Args>;
+    type NotificationMut: NotificationMutConcept<A, Args>;
 
     /// Write the arguments into the buffer and render it initialized.
     fn write(self, args: Args) -> Self::NotificationMut;
@@ -54,13 +54,13 @@ where
 }
 
 /// A Notifier is a client side entity that sends a fire-and-forget message.
-pub trait Notifier<A, Args>: Debug + Send
+pub trait NotifierConcept<A, Args>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
     Args: Copy + Send,
 {
     /// The associated uninitialized notification type.
-    type NotificationMaybeUninit: NotificationMaybeUninit<A, Args>;
+    type NotificationMaybeUninit: NotificationMaybeUninitConcept<A, Args>;
 
     /// Loan an uninitialized notification for new data to be notified.
     fn loan_uninit(&self) -> ComResult<Self::NotificationMaybeUninit>;
@@ -88,12 +88,12 @@ where
 }
 
 /// A `Receiver` is a service side entity that receives fire-and-forget messages.
-pub trait Receiver<A, Args>: Debug + Send
+pub trait ReceiverConcept<A, Args>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
     Args: Copy + Send,
 {
-    type Notification: Notification<A, Args>;
+    type Notification: NotificationConcept<A, Args>;
 
     /// Check for new notifications and consume it if present.
     fn try_receive(&self) -> ComResult<Option<Self::Notification>>;
@@ -121,13 +121,13 @@ where
 }
 
 /// The `FireAndForget` trait represents a fire-and-forget procedure in the communication system
-pub trait FireAndForget<A, Args>: Debug + Clone + Send
+pub trait FireAndForgetConcept<A, Args>: Debug + Clone + Send
 where
     A: TransportAdapter + ?Sized,
     Args: Copy + Send,
 {
-    type Notifier: Notifier<A, Args>;
-    type Receiver: Receiver<A, Args>;
+    type Notifier: NotifierConcept<A, Args>;
+    type Receiver: ReceiverConcept<A, Args>;
 
     /// Get a notifier for this fire-and-forget procedure
     fn notifier(&self) -> ComResult<Self::Notifier>;
@@ -137,12 +137,12 @@ where
 }
 
 /// A `FireAndForgetBuilder` is a builder for creating fire-and-forget procedures.
-pub trait FireAndForgetBuilder<A, Args>: Debug
+pub trait FireAndForgetBuilderConcept<A, Args>: Debug
 where
     A: TransportAdapter + ?Sized,
     Args: Copy + Send,
 {
-    type FireAndForget: FireAndForget<A, Args>;
+    type FireAndForget: FireAndForgetConcept<A, Args>;
 
     /// Build a fire-and-forget procedure with the given arguments.
     fn build(&self) -> ComResult<Self::FireAndForget>;

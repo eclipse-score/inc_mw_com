@@ -9,10 +9,8 @@ use super::Local;
 
 use qor_core::prelude::*;
 
-use crate::base::event::{
-    Event, EventBuilder, Publisher, Sample, SampleMaybeUninit, SampleMut, Subscriber,
-};
 use crate::base::*;
+use crate::concepts::*;
 
 use std::{
     collections::VecDeque,
@@ -24,7 +22,7 @@ use std::{
 };
 
 //
-// Event
+// Topic
 //
 
 /// The queue of a event, storing the unprocessed values
@@ -82,9 +80,9 @@ where
     }
 }
 
-impl<T> Sample<Local, T> for LocalSample<T> where T: Debug + Send + TypeTag + Coherent + Reloc {}
+impl<T> SampleConcept<Local, T> for LocalSample<T> where T: Debug + Send + TypeTag + Coherent + Reloc {}
 
-impl<T> SampleMut<Local, T> for LocalSample<T>
+impl<T> SampleMutConcept<Local, T> for LocalSample<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -94,7 +92,7 @@ where
         self
     }
 
-    fn send(self) -> ComResult<()> {
+    fn publish(self) -> ComResult<()> {
         let mut queue = self.queue.0.lock().unwrap();
 
         queue.push_back(self.value.into());
@@ -128,7 +126,7 @@ where
     }
 }
 
-impl<T> SampleMaybeUninit<Local, T> for LocalSampleMaybeUninit<T>
+impl<T> SampleMaybeUninitConcept<Local, T> for LocalSampleMaybeUninit<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -154,7 +152,7 @@ where
 
 /// The local event
 #[derive(Debug)]
-pub struct LocalEvent<T>
+pub struct LocalTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -165,7 +163,7 @@ where
     max_fan_out: usize,
 }
 
-impl<T> Clone for LocalEvent<T>
+impl<T> Clone for LocalTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -179,7 +177,7 @@ where
     }
 }
 
-impl<T> Publisher<Local, T> for LocalEvent<T>
+impl<T> PublisherConcept<Local, T> for LocalTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -192,12 +190,12 @@ where
     fn loan(
         &self,
         value: T,
-    ) -> ComResult<<Self::SampleMaybeUninit as SampleMaybeUninit<Local, T>>::SampleMut> {
+    ) -> ComResult<<Self::SampleMaybeUninit as SampleMaybeUninitConcept<Local, T>>::SampleMut> {
         Ok(LocalSample::new(self.queue.clone(), value))
     }
 }
 
-impl<T> Subscriber<Local, T> for LocalEvent<T>
+impl<T> SubscriberConcept<Local, T> for LocalTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -246,7 +244,7 @@ where
     }
 }
 
-impl<T> Event<Local, T> for LocalEvent<T>
+impl<T> TopicConcept<Local, T> for LocalTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -264,7 +262,7 @@ where
     }
 }
 
-impl<T> LocalEvent<T>
+impl<T> LocalTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -288,7 +286,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct LocalEventBuilder<T>
+pub struct LocalTopicBuilder<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -300,11 +298,11 @@ where
     max_fan_out: usize,
 }
 
-impl<T> EventBuilder<Local, T> for LocalEventBuilder<T>
+impl<T> TopicBuilderConcept<Local, T> for LocalTopicBuilder<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    type Event = LocalEvent<T>;
+    type Topic = LocalTopic<T>;
 
     #[inline(always)]
     fn with_queue_depth(mut self, queue_depth: usize) -> Self {
@@ -330,13 +328,13 @@ where
         self
     }
 
-    fn build(self) -> ComResult<Self::Event> {
+    fn build(self) -> ComResult<Self::Topic> {
         if self.max_fan_in > 1 {
             Err(ComError::FanError)
-        } else if self.max_fan_out > 1 {
+        } else if self.max_fan_out < 1 {
             Err(ComError::FanError)
         } else {
-            Ok(LocalEvent::new(
+            Ok(LocalTopic::new(
                 self.max_queue_depth,
                 self.queue_policy,
                 self.max_fan_in,
@@ -346,7 +344,7 @@ where
     }
 }
 
-impl<T> LocalEventBuilder<T>
+impl<T> LocalTopicBuilder<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {

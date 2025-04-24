@@ -14,7 +14,7 @@ use std::{fmt::Debug, ops::Deref};
 // Variables
 
 /// A setter is a read-write access to a variable.
-pub trait Setter<A, T>: Debug + Send + Deref<Target = T>
+pub trait SetterConcept<A, T>: Debug + Send + Deref<Target = T>
 where
     A: TransportAdapter + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
@@ -24,7 +24,7 @@ where
 }
 
 /// A getter is a read-only access to a variable.
-pub trait Getter<A, T>: Debug + Send + Deref<Target = T>
+pub trait GetterConcept<A, T>: Debug + Send + Deref<Target = T>
 where
     A: TransportAdapter + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
@@ -32,7 +32,7 @@ where
 }
 
 /// A `Variable` is a single value to be read or written.
-pub trait Variable<A, T>: Debug + Send + Deref<Target = T>
+pub trait VariableConcept<A, T>: Debug + Send + Deref<Target = T>
 where
     A: TransportAdapter + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,
@@ -47,7 +47,7 @@ where
     fn getter(&self) -> Self::Getter;
 }
 
-pub trait VariableBuilder<A, T>: Debug + Send
+pub trait VariableBuilderConcept<A, T>: Debug + Send
 where
     A: TransportAdapter + ?Sized,
     T: Debug + Send + TypeTag + Coherent + Reloc,

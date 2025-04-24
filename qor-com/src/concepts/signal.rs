@@ -14,18 +14,18 @@ use std::{fmt::Debug, future::Future, time::Duration};
 // Signal: Event-Driven Synchronization Messaging Pattern
 
 /// The signal `Emitter` trait is used to notify occurrences of the signal to the subscribed `Listners`.
-pub trait Emitter<A>: Debug + Send
+pub trait EmitterConcept<A>: Debug + Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
 {
     /// Comunicate an occurrence of the signal to all listeners of the signal.
     fn emit(&self);
 }
 
 /// A signal `Collector` receives the emissions of the subscribed `Signal`.
-pub trait Collector<A>: Debug + Send
+pub trait CollectorConcept<A>: Debug + Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
 {
     /// Check the current state of the signal.
     ///
@@ -56,18 +56,18 @@ where
     fn wait_timeout_async(&self, timeout: Duration) -> impl Future<Output = ComResult<bool>>;
 }
 
-/// A `Signal` represents a signal in the communication system notifying listeners of the occurrence of a state change connected to the signal.
+/// A `Signal` represents an occurence of a state change. An emitter notifies about the change and a collector listens to such notifications.
 ///
 /// The signal works like a `Condvar` but operates within the bounds of the communication subsystem.
-pub trait Signal<A>: Debug + Clone + Send
+pub trait SignalConcept<A>: Debug + Clone + Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
 {
     /// Associated Notifier type of the signal type
-    type Emitter: Emitter<A>;
+    type Emitter: EmitterConcept<A>;
 
     /// Associated Listener type of the signal type
-    type Collector: Collector<A>;
+    type Collector: CollectorConcept<A>;
 
     /// Get a emit for this signal
     fn emitter(&self) -> ComResult<Self::Emitter>;
@@ -77,12 +77,12 @@ where
 }
 
 /// The Builder for a `Signal`
-pub trait SignalBuilder<A>: Debug
+pub trait SignalBuilderConcept<A>: Debug
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
 {
     /// The type of the created signal
-    type Signal: Signal<A>;
+    type Signal: SignalConcept<A>;
 
     /// Build the signal
     fn build(self) -> ComResult<Self::Signal>;

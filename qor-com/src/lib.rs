@@ -321,6 +321,8 @@
 /// The prelude module contains the core functionality of the qor-com library.
 pub mod prelude {
     pub use crate::base::*;
+    pub use crate::concepts::*;
+    pub use crate::types::*;
 
     pub use crate::adapter;
 
@@ -328,8 +330,74 @@ pub mod prelude {
     pub use crate::adapter::dynamic::*;
 }
 
-/// Basic definitions and traits of communication
+/// Basic definitions of communication
 pub mod base;
+
+/// Concepts of communication
+pub mod concepts;
+
+/// Convenience types aliases of communication
+pub mod types {
+    pub use crate::concepts::*;
+
+    #[cfg(feature = "signals_supported")]
+    type SignalBuilder<A> = <A as TransportAdapterConcept>::SignalBuilder;
+    #[cfg(feature = "signals_supported")]
+    type Signal<A> = <SignalBuilder<A> as SignalBuilderConcept<A>>::Signal;
+    #[cfg(feature = "signals_supported")]
+    type SignalEmitter<A> = <Signal<A> as SignalConcept<A>>::Emitter;
+    #[cfg(feature = "signals_supported")]
+    type SignalReceiver<A> = <Signal<A> as SignalConcept<A>>::Collector;
+
+    #[cfg(feature = "topics_supported")]
+    pub type TopicBuilder<A, T> = <A as TransportAdapterConcept>::TopicBuilder<T>;
+    #[cfg(feature = "topics_supported")]
+    pub type Topic<A, T> = <TopicBuilder<A, T> as TopicBuilderConcept<A, T>>::Topic;
+    #[cfg(feature = "topics_supported")]
+    pub type TopicPublisher<A, T> = <Topic<A, T> as TopicConcept<A, T>>::Publisher;
+    #[cfg(feature = "topics_supported")]
+    pub type TopicSubscriber<A, T> = <Topic<A, T> as TopicConcept<A, T>>::Subscriber;
+    #[cfg(feature = "topics_supported")]
+    pub type SampleMaybeUninit<A, T> =
+        <TopicPublisher<A, T> as PublisherConcept<A, T>>::SampleMaybeUninit;
+    #[cfg(feature = "topics_supported")]
+    pub type SampleMut<A, T> =
+        <SampleMaybeUninit<A, T> as SampleMaybeUninitConcept<A, T>>::SampleMut;
+    #[cfg(feature = "topics_supported")]
+    pub type Sample<A, T> = <SampleMut<A, T> as SampleMutConcept<A, T>>::Sample;
+
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcBuilder<A, F, Args, R> = <A as TransportAdapterConcept>::RpcBuilder<F, Args, R>;
+    #[cfg(feature = "rpcs_supported")]
+    pub type Rpc<A, F, Args, R> =
+        <RpcBuilder<A, F, Args, R> as RpcBuilderConcept<A, F, Args, R>>::Rpc;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcInvoker<A, F, Args, R> = <Rpc<A, F, Args, R> as RpcConcept<A, F, Args, R>>::Invoker;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcRequestMaybeUninit<A, F, Args, R> =
+        <RpcInvoker<A, F, Args, R> as InvokerConcept<A, F, Args, R>>::RequestMaybeUninit;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcRequestMut<A, F, Args, R> =
+        <RpcRequestMaybeUninit<A, F, Args, R> as RequestMaybeUninitConcept<A, F, Args, R>>::RequestMut;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcPendingRequest<A, F, Args, R> =
+        <RpcRequestMut<A, F, Args, R> as RequestMutConcept<A, F, Args, R>>::PendingRequest;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcResponse<A, F, Args, R> =
+        <RpcPendingRequest<A, F, Args, R> as PendingRequestConcept<A, F, Args, R>>::Response;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RemoteProcedureInvoked<A, F, Args, R> =
+        <Rpc<A, F, Args, R> as RpcConcept<A, F, Args, R>>::Invoked;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcRequest<A, F, Args, R> =
+        <RemoteProcedureInvoked<A, F, Args, R> as InvokedConcept<A, F, Args, R>>::Request;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcResponseMaybeUninit<A, F, Args, R> =
+        <RpcRequest<A, F, Args, R> as RequestConcept<A, F, Args, R>>::ResponseMaybeUninit;
+    #[cfg(feature = "rpcs_supported")]
+    pub type RpcResponseMut<A, F, Args, R> =
+        <RpcResponseMaybeUninit<A, F, Args, R> as ResponseMaybeUninitConcept<A, F, Args, R>>::ResponseMut;
+}
 
 /// Default transport adapter implementations
 pub mod adapter;

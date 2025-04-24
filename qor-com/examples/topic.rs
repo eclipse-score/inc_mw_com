@@ -20,33 +20,37 @@ use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar};
 const CYCLE_TIME: Duration = Duration::from_millis(100);
 
 #[derive(Debug)]
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "topics_supported")]
 struct Payload {
     value: u32,
     arr: [u32; 8],
 }
 
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "topics_supported")]
 impl TypeTag for Payload {
     const TYPE_TAG: Tag = Tag::new(*b"_Payload");
 }
 
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "topics_supported")]
 impl Coherent for Payload {}
 
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "topics_supported")]
 unsafe impl Reloc for Payload {}
 
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "topics_supported")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let adapter = adapter::local::Local::new();
     let stop_signal = Arc::new((AtomicBool::new(false), Condvar::new()));
 
     // our event
-    let event = adapter.event_builder::<Payload>(Label::new("DemoEvent")).build()?;
+    let topic = adapter
+        .topic_builder::<Payload>(Label::new("DemoEvent"))
+        .with_max_fan_in(1)
+        .with_max_fan_out(8)
+        .build()?;
 
     // subscriber and thread
-    let subscriber = event.subscriber()?;
+    let subscriber = topic.subscriber()?;
     let stop_clone = stop_signal.clone();
     let subscribe = std::thread::spawn(move || {
         loop {
@@ -59,19 +63,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             match subscriber.receive_timeout(10 * CYCLE_TIME) {
                 Ok(sample) => {
                     println!(
-                        "Subscribe: Ok: value: {}, arr: {:?}",
+                        "Subscriber: Ok: value: {}, arr: {:?}",
                         sample.value, sample.arr
                     );
                 }
                 Err(e) => {
-                    println!("Subscribe: Error: {:?}", e);
+                    println!("Subscriber: Error: {:?}", e);
                 }
             }
         }
     });
 
     // publisher and thread
-    let publisher = event.publisher()?;
+    let publisher = topic.publisher()?;
     let stop_clone = stop_signal.clone();
     let publish = std::thread::spawn(move || {
         let mut counter: u32 = 0;
@@ -116,7 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(not(feature = "events_supported"))]
+#[cfg(not(feature = "topics_supported"))]
 fn main() {
     println!("This example requires the `signals_supported` feature to be enabled")
 }

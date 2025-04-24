@@ -16,9 +16,9 @@ mod signal;
 #[cfg(feature = "signals_supported")]
 pub use signal::*;
 
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 mod event;
-#[cfg(feature = "events_supported")]
+#[cfg(feature = "signals_supported")]
 pub use event::*;
 
 #[cfg(feature = "rpcs_supported")]
@@ -109,7 +109,7 @@ impl TransportAdapter for Dynamic {
     #[cfg(feature = "signals_supported")]
     type SignalBuilder = DynamicSignalBuilder;
 
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "signals_supported")]
     type EventBuilder<T>
         = DynamicEventBuilder<T>
     where
@@ -134,7 +134,7 @@ impl TransportAdapter for Dynamic {
     }
 
     /// Create a new topic on the local heap
-    #[cfg(feature = "events_supported")]   
+    #[cfg(feature = "signals_supported")]   
     fn event<T>(&self, label: Label) -> Self::EventBuilder<T>
     where
         T: TypeTag + Coherent + Reloc + Send + Debug,
@@ -206,7 +206,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "events_supported")]   
+    #[cfg(feature = "signals_supported")]   
     fn test_dynamic_event() {
         let adapter = Dynamic::new(Local::new());
         let event = adapter
@@ -241,7 +241,7 @@ mod test {
 
     type Payload = MyData;
 
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "signals_supported")]
     fn thread_proc_publish(event: impl Event<Dynamic, Payload>) {
         let span = span!(Level::INFO, "[Dynamic] thread_proc_publish");
         let _guard = span.enter();
@@ -258,7 +258,7 @@ mod test {
         }
     }
 
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "signals_supported")]
     fn thread_proc_subscribe(event: impl Event<Dynamic, Payload>) -> ComResult<u32> {
         let span = span!(Level::INFO, "[Dynamic] thread_proc_subscribe");
         let _guard = span.enter();
@@ -277,7 +277,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "events_supported")]
+    #[cfg(feature = "signals_supported")]
     fn test_dynamic_event_threading() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
         static ADAPTER: std::sync::LazyLock<Dynamic> =

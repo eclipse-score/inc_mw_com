@@ -6,9 +6,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-
-use qor_core::prelude::*;
 use qor_com::prelude::*;
+use qor_core::prelude::*;
 
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar};
@@ -23,10 +22,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // our signal
     let signal = adapter.signal_builder(Label::INVALID).build()?;
 
-    // listener and thread
-    let listener = signal.collector()?;
+    // collector and thread
+    let collector = signal.collector()?;
     let stop_clone = stop_signal.clone();
-    let listen = std::thread::spawn(move || {
+    let collect = std::thread::spawn(move || {
         loop {
             // check the stop signal
             if stop_clone.0.load(Ordering::Acquire) {
@@ -34,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // wait for the signal
-            match listener.wait_timeout(2* CYCLE_TIME) {
+            match collector.wait_timeout(2 * CYCLE_TIME) {
                 Ok(true) => {
                     println!("Signal received");
                 }
@@ -73,13 +72,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // wait for the threads to finish
     emit.join().unwrap();
-    listen.join().unwrap();
+    collect.join().unwrap();
     println!("Threads joined");
 
     Ok(())
 }
 
-#[cfg(not (feature = "signals_supported"))]
+#[cfg(not(feature = "signals_supported"))]
 fn main() {
     println!("This example requires the `signals_supported` feature to be enabled")
 }

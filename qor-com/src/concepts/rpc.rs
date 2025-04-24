@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use adapter::TransportAdapterConcept;
 
 use std::{
     future::Future,
@@ -18,14 +19,14 @@ use std::{
 // Remote Procedure Calls: Request-Response Messaging Pattern
 
 /// A `RequestMaybeUninit` is an uninitialized invocation request used on client side for invocations
-pub trait RequestMaybeUninit<A, F, Args, R>
+pub trait RequestMaybeUninitConcept<A, F, Args, R>
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type RequestMut: RequestMut<A, F, Args, R>;
+    type RequestMut: RequestMutConcept<A, F, Args, R>;
 
     /// Write the arguments into the buffer and render it initialized.
     fn write(self, args: Args) -> Self::RequestMut;
@@ -38,14 +39,14 @@ where
 }
 
 /// A `RequestMut` is a mutable invocation request used on client side for invocations
-pub trait RequestMut<A, F, Args, R>: DerefMut<Target = Args>
+pub trait RequestMutConcept<A, F, Args, R>: DerefMut<Target = Args>
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type PendingRequest: PendingRequest<A, F, Args, R>;
+    type PendingRequest: PendingRequestConcept<A, F, Args, R>;
 
     /// Execute the request by sending it to the service.
     ///
@@ -59,14 +60,14 @@ where
 ///
 /// SAFETY: Once a response is obtained consecutive calls
 /// to the receive functions is considered undefined behavior.
-pub trait PendingRequest<A, F, Args, R>: Send
+pub trait PendingRequestConcept<A, F, Args, R>: Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Response: Response<A, F, Args, R>;
+    type Response: ResponseConcept<A, F, Args, R>;
 
     /// Check if the response is ready.
     fn try_receive(&self) -> ComResult<Option<Self::Response>>;
@@ -88,14 +89,14 @@ where
 }
 
 /// The `Request` is a read-only invocation request used on service side for incoming invocations
-pub trait Request<A, F, Args, R>: Send + Deref<Target = Args>
+pub trait RequestConcept<A, F, Args, R>: Send + Deref<Target = Args>
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type ResponseMaybeUninit: ResponseMaybeUninit<A, F, Args, R>;
+    type ResponseMaybeUninit: ResponseMaybeUninitConcept<A, F, Args, R>;
 
     /// Get an uninitialized response for the return value type.
     fn loan_response_uninit(&self) -> ComResult<Self::ResponseMaybeUninit>;
@@ -108,7 +109,7 @@ where
         &self,
         value: R,
     ) -> ComResult<
-        <<Self as Request<A, F, Args, R>>::ResponseMaybeUninit as ResponseMaybeUninit<
+        <<Self as RequestConcept<A, F, Args, R>>::ResponseMaybeUninit as ResponseMaybeUninitConcept<
             A,
             F,
             Args,
@@ -131,9 +132,9 @@ where
 ///
 /// The response can only obtained by a `PendingRequest`. In case of a communication error,
 /// PendingRequest will return an error instead of a response.
-pub trait Response<A, F, Args, R>: Deref<Target = R>
+pub trait ResponseConcept<A, F, Args, R>: Deref<Target = R>
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
@@ -141,14 +142,14 @@ where
 }
 
 /// The `ResponseMaybeUninit` is an uninitialized response of a remote procedure call used on service side for sending results.
-pub trait ResponseMaybeUninit<A, F, Args, R>
+pub trait ResponseMaybeUninitConcept<A, F, Args, R>
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type ResponseMut: ResponseMut<A, F, Args, R>;
+    type ResponseMut: ResponseMutConcept<A, F, Args, R>;
 
     /// Write the value into the buffer and render it initialized.
     fn write(self, value: R) -> Self::ResponseMut;
@@ -161,9 +162,9 @@ where
 }
 
 /// The `ResponseMut` is a mutable response of a remote procedure call used on service side for sending results.
-pub trait ResponseMut<A, F, Args, R>: DerefMut<Target = R>
+pub trait ResponseMutConcept<A, F, Args, R>: DerefMut<Target = R>
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
@@ -174,14 +175,14 @@ where
 /// The `Invoker` trait represents the client-side stub of remote procedures.
 ///
 /// With an invoker the client issues invocation requests to the service side.
-pub trait Invoker<A, F, Args, R>: Send
+pub trait InvokerConcept<A, F, Args, R>: Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type RequestMaybeUninit: RequestMaybeUninit<A, F, Args, R>;
+    type RequestMaybeUninit: RequestMaybeUninitConcept<A, F, Args, R>;
     // Response := Self::RequestMaybeUninit::RequestMut::PendingRequest::Response;
 
     /// Prepare an invocation request with uninitialized arguments.
@@ -199,7 +200,7 @@ where
         &self,
         args: Args,
     ) -> ComResult<
-        <<Self as Invoker<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninit<
+        <<Self as InvokerConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
             A,
             F,
             Args,
@@ -220,12 +221,12 @@ where
         &self,
         args: Args,
     ) -> ComResult<
-        <<<<Self as Invoker<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninit<
+        <<<<Self as InvokerConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
             A,
             F,
             Args,
             R,
-        >>::RequestMut as RequestMut<A, F, Args, R>>::PendingRequest as PendingRequest<
+        >>::RequestMut as RequestMutConcept<A, F, Args, R>>::PendingRequest as PendingRequestConcept<
             A,
             F,
             Args,
@@ -248,12 +249,12 @@ where
         args: Args,
         timeout: Duration,
     ) -> ComResult<
-        <<<<Self as Invoker<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninit<
+        <<<<Self as InvokerConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
             A,
             F,
             Args,
             R,
-        >>::RequestMut as RequestMut<A, F, Args, R>>::PendingRequest as PendingRequest<
+        >>::RequestMut as RequestMutConcept<A, F, Args, R>>::PendingRequest as PendingRequestConcept<
             A,
             F,
             Args,
@@ -289,14 +290,14 @@ where
 /// The `Invoked` trait represents the service side skeleton of a remote procedure.
 ///
 /// The trait is used to receive and process incoming requests and send responses.
-pub trait Invoked<A, F, Args, R>: Send
+pub trait InvokedConcept<A, F, Args, R>: Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Request: Request<A, F, Args, R>;
+    type Request: RequestConcept<A, F, Args, R>;
     // We do not define a Response, as ResponseMaybeUninit := <Self::Request as Request<A, F, Args, R>>::ResponseMybeUninit;
 
     /// test if an incoming invocation request is present and return the corresponding request.
@@ -380,15 +381,15 @@ where
 ///
 /// A Rpc is always considerered stateless. This means there are different bindings for incoming client connections.
 /// Therefore, the invokee of the remote procedure can directly obtained through the `Rpc` trait.
-pub trait Rpc<A, F, Args, R>: Clone + Send
+pub trait RpcConcept<A, F, Args, R>: Clone + Send
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Invoker: Invoker<A, F, Args, R>;
-    type Invoked: Invoked<A, F, Args, R>;
+    type Invoker: InvokerConcept<A, F, Args, R>;
+    type Invoked: InvokedConcept<A, F, Args, R>;
 
     /// Get a client-side invoker for this remote procedure
     fn invoker(&self) -> ComResult<Self::Invoker>;
@@ -398,14 +399,14 @@ where
 }
 
 /// The Builder for an `Rpc` remote procedure type
-pub trait RpcBuilder<A, F, Args, R>:
+pub trait RpcBuilderConcept<A, F, Args, R>:
 where
-    A: TransportAdapter + ?Sized,
+    A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Rpc: Rpc<A, F, Args, R>;
+    type Rpc: RpcConcept<A, F, Args, R>;
 
     /// Set the queue depth of the remote procedure.
     fn with_queue_depth(self, queue_depth: usize) -> Self;
