@@ -40,10 +40,13 @@
 //! - Structures
 //! - Tuples
 
+use crate::sample_impl::{Publisher, Subscriber};
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
+use std::process::Output;
 
 #[derive(Debug)]
 pub enum Error {
@@ -55,12 +58,21 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub trait Builder {
     type Output;
     /// Open point: Should this be &mut self so that this can be turned into a trait object?
-    fn build(self) -> Self::Output;
+    fn build(self) -> Result<Self::Output>;
 }
 
 /// This represents the com implementation and acts as a root for all types and objects provided by
 /// the implementation.
-pub trait Runtime {}
+pub trait Runtime {
+    type InstanceBuilder<I>: InstanceBuilder<I>
+    where
+        I: Interface;
+
+    fn instance_builder<I: Interface>(
+        &self,
+        instance_specifier: InstanceSpecifier,
+    ) -> Self::InstanceBuilder<I>;
+}
 
 pub trait RuntimeBuilder: Builder
 where
@@ -143,12 +155,101 @@ where
     unsafe fn assume_init(self) -> Self::SampleMut;
 }
 
+struct InstanceSpecifier {}
+
+// interface Auto {
+//     linkes_rad: Event<Rad>,
+//     auspuff: Event<Auspuff>,
+//     set_blinker_zustand: FnMut(blinkmodus: BlinkModus) -> Result<bool>,
+// }
+
+struct Rad {}
+
+struct Auspuff {}
+
+trait Skeleton {}
+trait Proxy {}
+
+pub trait Interface {}
+
+pub trait Instance<I: Interface> {
+    type Producer: Skeleton;
+    type Consumer: Proxy;
+
+    fn producer(&self) -> Self::Producer;
+    fn consumer(&self) -> Self::Consumer;
+}
+
+pub trait InstanceBuilder<I: Interface>: Builder<Output: Instance<I>> {
+    fn key_str(self, key: &str, value: &str) -> Self;
+}
+
+struct AutoInterface {
+    instance_specifier: InstanceSpecifier,
+}
+
+impl Interface for AutoInterface {}
+
+struct AutoInstance {}
+
+impl Instance<AutoInterface> for AutoInstance {
+    type Producer = AutoProducer;
+    type Consumer = AutoConsumer;
+
+    fn producer(&self) -> Self::Producer {
+        AutoProducer {
+            linkes_rad: unimplemented!(),
+            auspuff: unimplemented!(),
+        }
+    }
+
+    fn consumer(&self) -> Self::Consumer {
+        AutoConsumer {
+            linkes_rad: unimplemented!(),
+            auspuff: unimplemented!(),
+        }
+    }
+}
+
+impl Builder for AutoInterface {
+    type Output = Self;
+    fn build(self) -> Result<AutoInterface> {
+        Ok(self)
+    }
+}
+
+struct AutoProducer {
+    linkes_rad: Publisher<Rad>,
+    auspuff: Publisher<Auspuff>,
+}
+
+impl Skeleton for AutoProducer {}
+
+struct AutoConsumer {
+    linkes_rad: Subscriber<Rad>,
+    auspuff: Subscriber<Auspuff>,
+}
+
+impl Proxy for AutoConsumer {}
+
 mod sample_impl;
 
 #[cfg(test)]
 mod test {
-    use super::{Builder, SampleMaybeUninit, SampleMut};
+    use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn create_producer() {
+        let runtime_builder = sample_impl::RuntimeBuilderImpl::new();
+        let runtime = runtime_builder.build().unwrap();
+        let builder = runtime
+            .instance_builder::<AutoInterface>(InstanceSpecifier {})
+            .key_str("key", "value");
+        let instance = builder.build().unwrap();
+        let producer = instance.producer().unwrap();
+        let consumer = instance.consumer().unwrap();
+    }
 
     #[test]
     fn receive_stuff() {
@@ -191,8 +292,5 @@ mod test {
     }
 
     #[test]
-    fn build_production_runtime() {
-        let runtime_builder = crate::sample_impl::RuntimeBuilderImpl::new();
-        let _runtime = runtime_builder.build();
-    }
+    fn build_production_runtime() {}
 }

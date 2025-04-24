@@ -11,23 +11,84 @@
 
 #![allow(dead_code)]
 
-use crate::Reloc;
+use crate::{Builder, Instance, InstanceBuilder, InstanceSpecifier, Interface, Reloc};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::time::Duration;
 
+pub struct DefaultInstance<I: Interface> {
+    instance_id: InstanceSpecifier,
+    _phantom_data: PhantomData<I>,
+}
+
+impl<I: Interface> Instance<I> for DefaultInstance<I> {
+    fn instance_id(&self) -> &InstanceSpecifier {
+        &self.instance_id
+    }
+
+    fn producer(&self) -> crate::Result<<I as Interface>::Producer> {
+        Ok(<I as Interface>::producer(&self.instance_id))
+    }
+
+    fn consumer(&self) -> crate::Result<<I as Interface>::Consumer> {
+        Ok(<I as Interface>::consumer(&self.instance_id))
+    }
+}
+
+pub struct DefaultInstanceBuilder<I: Interface> {
+    instance_id: InstanceSpecifier,
+    _phantom_data: PhantomData<I>,
+}
+
+impl<I: Interface> Builder for DefaultInstanceBuilder<I> {
+    type Output = DefaultInstance<I>;
+    fn build(self) -> crate::Result<Self::Output> {
+        Ok(DefaultInstance {
+            instance_id: self.instance_id,
+            _phantom_data: PhantomData,
+        })
+    }
+}
+impl<I: Interface> InstanceBuilder<I> for DefaultInstanceBuilder<I> {
+    fn key_str(mut self, key: &str, value: &str) -> Self {
+        todo!();
+        self
+    }
+}
+
+impl<I: Interface> DefaultInstanceBuilder<I> {
+    pub fn new(instance_id: InstanceSpecifier) -> Self {
+        Self {
+            instance_id,
+            _phantom_data: PhantomData,
+        }
+    }
+}
+
 pub struct RuntimeImpl {}
-impl crate::Runtime for RuntimeImpl {}
+impl crate::Runtime for RuntimeImpl {
+    type InstanceBuilder<I>
+        = InstanceBuilder<I>
+    where
+        I: Interface;
+
+    fn instance_builder<I: Interface>(
+        &self,
+        instance_specifier: InstanceSpecifier,
+    ) -> Self::InstanceBuilder<I> {
+        DefaultInstanceBuilder::new(instance_specifier)
+    }
+}
 
 pub struct RuntimeBuilderImpl {}
 
 /// Generic trait for all "factory-like" types
-impl crate::Builder for RuntimeBuilderImpl {
+impl Builder for RuntimeBuilderImpl {
     type Output = RuntimeImpl;
-    fn build(self) -> Self::Output {
-        Self::Output {}
+    fn build(self) -> crate::Result<Self::Output> {
+        Ok(Self::Output {})
     }
 }
 
@@ -40,8 +101,8 @@ impl crate::RuntimeBuilder for RuntimeBuilderImpl {
 
 impl RuntimeBuilderImpl {
     /// Creates a new instance of the default implementation of the com layer
-    pub fn new() -> crate::Result<Self> {
-        Ok(Self {})
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
