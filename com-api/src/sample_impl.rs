@@ -11,7 +11,10 @@
 
 #![allow(dead_code)]
 
-use crate::{Builder, Instance, InstanceBuilder, InstanceSpecifier, Interface, Reloc};
+use crate::{
+    Builder, ConsumerBuilder, Instance, InstanceSpecifier, Interface, ProducerBuilder, Reloc,
+    SampleInstance,
+};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
@@ -23,7 +26,7 @@ pub struct DefaultInstance<I: Interface> {
     _phantom_data: PhantomData<I>,
 }
 
-impl<I: Interface> Instance<I> for DefaultInstance<I> {
+/*impl<I: Interface> Instance<I> for DefaultInstance<I> {
     fn instance_id(&self) -> &InstanceSpecifier {
         &self.instance_id
     }
@@ -66,19 +69,41 @@ impl<I: Interface> DefaultInstanceBuilder<I> {
         }
     }
 }
+*/
+
+struct SampleInstanceImpl<I: Interface> {
+    _interface: PhantomData<I>,
+}
+
+impl<I: Interface> Instance<I> for SampleInstanceImpl<I>
+where
+    I: SampleInstance<I>,
+{
+    type ProducerBuilder = <I as SampleInstance<I>>::ProducerBuilder;
+    type ConsumerBuilder = <I as SampleInstance<I>>::ConsumerBuilder;
+
+    fn producer(&self) -> Self::ProducerBuilder {
+        todo!()
+    }
+
+    fn consumer(&self) -> Self::ConsumerBuilder {
+        todo!()
+    }
+}
 
 pub struct RuntimeImpl {}
 impl crate::Runtime for RuntimeImpl {
-    type InstanceBuilder<I>
-        = InstanceBuilder<I>
+    type InstanceSpecifier = crate::InstanceSpecifier;
+    type Instance<I>
+        = SampleInstanceImpl<I>
     where
         I: Interface;
 
-    fn instance_builder<I: Interface>(
+    fn make_instance<I: Interface>(
         &self,
-        instance_specifier: InstanceSpecifier,
-    ) -> Self::InstanceBuilder<I> {
-        DefaultInstanceBuilder::new(instance_specifier)
+        instance_specifier: Self::InstanceSpecifier,
+    ) -> Self::Instance<I> {
+        <I as SampleInstance<I>>::new(instance_specifier)
     }
 }
 
@@ -247,11 +272,9 @@ where
     }
 
     unsafe fn assume_init(self) -> SampleMut<'a, T> {
-        unsafe {
-            SampleMut {
-                data: unsafe { self.data.assume_init() },
-                _lifetime: PhantomData,
-            }
+        SampleMut {
+            data: unsafe { self.data.assume_init() },
+            _lifetime: PhantomData,
         }
     }
 }

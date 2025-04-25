@@ -64,14 +64,16 @@ pub trait Builder {
 /// This represents the com implementation and acts as a root for all types and objects provided by
 /// the implementation.
 pub trait Runtime {
-    type InstanceBuilder<I>: InstanceBuilder<I>
+    type InstanceSpecifier;
+
+    type Instance<I>: Instance<I>
     where
         I: Interface;
 
-    fn instance_builder<I: Interface>(
+    fn make_instance<I: Interface>(
         &self,
-        instance_specifier: InstanceSpecifier,
-    ) -> Self::InstanceBuilder<I>;
+        instance_specifier: Self::InstanceSpecifier,
+    ) -> Self::Instance<I>;
 }
 
 pub trait RuntimeBuilder: Builder
@@ -167,70 +169,92 @@ struct Rad {}
 
 struct Auspuff {}
 
-trait Skeleton {}
-trait Proxy {}
+trait ProducerBuilder: Builder {}
+trait ConsumerBuilder: Builder {}
 
 pub trait Interface {}
 
 pub trait Instance<I: Interface> {
-    type Producer: Skeleton;
-    type Consumer: Proxy;
+    type ProducerBuilder: ProducerBuilder;
+    type ConsumerBuilder: ConsumerBuilder;
 
-    fn producer(&self) -> Self::Producer;
-    fn consumer(&self) -> Self::Consumer;
+    fn producer(&self) -> Self::ProducerBuilder;
+    fn consumer(&self) -> Self::ConsumerBuilder;
 }
 
-pub trait InstanceBuilder<I: Interface>: Builder<Output: Instance<I>> {
-    fn key_str(self, key: &str, value: &str) -> Self;
+pub trait SampleInstance<I: Interface> {
+    type Instance;
+    fn new(instance_specifier: InstanceSpecifier) -> Self::Instance;
+    type ProducerBuilder: ProducerBuilder;
+    type ConsumerBuilder: ConsumerBuilder;
+
+    fn producer(&self) -> Self::ProducerBuilder;
+    fn consumer(&self) -> Self::ConsumerBuilder;
 }
 
-struct AutoInterface {
+/// Generic
+struct AutoInterface {}
+
+/// Generic
+impl Interface for AutoInterface {}
+
+/// Runtime specific
+struct AutoInstance {
     instance_specifier: InstanceSpecifier,
 }
 
-impl Interface for AutoInterface {}
+impl SampleInstance<AutoInterface> for AutoInterface {
+    type Instance = AutoInstance;
 
-struct AutoInstance {}
-
-impl Instance<AutoInterface> for AutoInstance {
-    type Producer = AutoProducer;
-    type Consumer = AutoConsumer;
-
-    fn producer(&self) -> Self::Producer {
-        AutoProducer {
-            linkes_rad: unimplemented!(),
-            auspuff: unimplemented!(),
-        }
+    fn new(instance_specifier: InstanceSpecifier) -> Self::Instance {
+        AutoInstance { instance_specifier }
     }
 
-    fn consumer(&self) -> Self::Consumer {
-        AutoConsumer {
-            linkes_rad: unimplemented!(),
-            auspuff: unimplemented!(),
-        }
+    type ProducerBuilder = AutoProducerBuilder;
+    type ConsumerBuilder = AutoConsumerBuilder;
+
+    fn producer(&self) -> Self::ProducerBuilder {
+        AutoProducerBuilder {}
+    }
+
+    fn consumer(&self) -> Self::ConsumerBuilder {
+        AutoConsumerBuilder {}
     }
 }
 
-impl Builder for AutoInterface {
-    type Output = Self;
-    fn build(self) -> Result<AutoInterface> {
-        Ok(self)
+struct AutoProducerBuilder {}
+
+impl Builder for AutoProducerBuilder {
+    type Output = AutoProducer;
+
+    fn build(self) -> Result<Self::Output> {
+        todo!()
     }
 }
+
+impl ProducerBuilder for AutoProducerBuilder {}
+
+struct AutoConsumerBuilder {}
+
+impl Builder for AutoConsumerBuilder {
+    type Output = AutoConsumer;
+
+    fn build(self) -> Result<Self::Output> {
+        todo!()
+    }
+}
+
+impl ConsumerBuilder for AutoConsumerBuilder {}
 
 struct AutoProducer {
     linkes_rad: Publisher<Rad>,
     auspuff: Publisher<Auspuff>,
 }
 
-impl Skeleton for AutoProducer {}
-
 struct AutoConsumer {
     linkes_rad: Subscriber<Rad>,
     auspuff: Subscriber<Auspuff>,
 }
-
-impl Proxy for AutoConsumer {}
 
 mod sample_impl;
 
@@ -243,12 +267,10 @@ mod test {
     fn create_producer() {
         let runtime_builder = sample_impl::RuntimeBuilderImpl::new();
         let runtime = runtime_builder.build().unwrap();
-        let builder = runtime
-            .instance_builder::<AutoInterface>(InstanceSpecifier {})
-            .key_str("key", "value");
-        let instance = builder.build().unwrap();
-        let producer = instance.producer().unwrap();
-        let consumer = instance.consumer().unwrap();
+        let builder = runtime.make_instance::<AutoInterface>(InstanceSpecifier {});
+        //.key_str("key", "value");
+        let producer = builder.producer().build().unwrap();
+        let consumer = builder.consumer().build().unwrap();
     }
 
     #[test]
