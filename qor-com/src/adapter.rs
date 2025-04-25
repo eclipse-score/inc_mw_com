@@ -8,6 +8,9 @@
 
 /// The local in-process transport adapter
 pub mod local;
+pub use local::Local as LocalAdapter;
 
 #[cfg(feature = "dynamic_adapter")]
 pub mod dynamic;
+#[cfg(feature = "dynamic_adapter")]
+pub use dynamic::Dynamic as DynamicAdapter;

@@ -5,17 +5,14 @@
 // https://www.apache.org/licenses/LICENSE-2.0.
 //
 // SPDX-License-Identifier: Apache-2.0
-use super::Dynamic;
 
 use qor_core::prelude::*;
 
 use crate::base::*;
-
 use crate::types::{
     PublisherConcept, Sample, SampleConcept, SampleMaybeUninit, SampleMaybeUninitConcept, SampleMut, SampleMutConcept, SubscriberConcept, Topic, TopicBuilder, TopicBuilderConcept, TopicConcept, TopicPublisher, TopicSubscriber
 };
-
-use crate::adapter::local::Local as LocalAdapter;
+use crate::adapter::*;
 
 use std::{
     fmt::Debug,
@@ -113,7 +110,7 @@ where
     }
 }
 
-impl<T> SampleConcept<Dynamic, T> for DynamicSample<T> where T: Debug + Send + TypeTag + Coherent + Reloc {}
+impl<T> SampleConcept<DynamicAdapter, T> for DynamicSample<T> where T: Debug + Send + TypeTag + Coherent + Reloc {}
 
 #[derive(Debug)]
 pub struct DynamicSampleMut<T>
@@ -147,7 +144,7 @@ where
     }
 }
 
-impl<T> SampleMutConcept<Dynamic, T> for DynamicSampleMut<T>
+impl<T> SampleMutConcept<DynamicAdapter, T> for DynamicSampleMut<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -176,7 +173,7 @@ where
     inner: SampleMaybeUninitSelector<T>,
 }
 
-impl<T> SampleMaybeUninitConcept<Dynamic, T> for DynamicSampleMaybeUninit<T>
+impl<T> SampleMaybeUninitConcept<DynamicAdapter, T> for DynamicSampleMaybeUninit<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -213,7 +210,7 @@ where
     inner: PublisherSelector<T>,
 }
 
-impl<T> PublisherConcept<Dynamic, T> for DynamicPublisher<T>
+impl<T> PublisherConcept<DynamicAdapter, T> for DynamicPublisher<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -238,7 +235,7 @@ where
 {
     inner: SubscriberSelector<T>,
 }
-impl<T> SubscriberConcept<Dynamic, T> for DynamicSubscriber<T>
+impl<T> SubscriberConcept<DynamicAdapter, T> for DynamicSubscriber<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -320,7 +317,7 @@ where
     }
 }
 
-impl<T> TopicConcept<Dynamic, T> for DynamicTopic<T>
+impl<T> TopicConcept<DynamicAdapter, T> for DynamicTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -368,7 +365,7 @@ where
     }
 }
 
-impl<T> TopicBuilderConcept<Dynamic, T> for DynamicTopicBuilder<T>
+impl<T> TopicBuilderConcept<DynamicAdapter, T> for DynamicTopicBuilder<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {

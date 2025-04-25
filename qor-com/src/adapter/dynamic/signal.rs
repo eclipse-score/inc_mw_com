@@ -5,12 +5,12 @@
 // https://www.apache.org/licenses/LICENSE-2.0.
 //
 // SPDX-License-Identifier: Apache-2.0
-use super::*;
 
-use crate::types::{Signal, SignalBuilder, SignalCollector, SignalEmitter};
+use crate::base::*;
+use crate::types::{CollectorConcept, EmitterConcept, Signal, SignalBuilder, SignalBuilderConcept, SignalCollector, SignalConcept, SignalEmitter};
+use crate::adapter::*;
 
-use crate::adapter::local::Local as LocalAdapter;
-
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -46,7 +46,7 @@ pub struct DynamicEmitter {
     inner: EmitterSelector,
 }
 
-impl EmitterConcept<Dynamic> for DynamicEmitter {
+impl EmitterConcept<DynamicAdapter> for DynamicEmitter {
     // Notify the event by setting the flag and waking up all listeners
     fn emit(&self) {
         match &self.inner {
@@ -60,7 +60,7 @@ pub struct DynamicCollector {
     inner: CollectorSelector,
 }
 
-impl CollectorConcept<Dynamic> for DynamicCollector {
+impl CollectorConcept<DynamicAdapter> for DynamicCollector {
     #[inline(always)]
     fn check(&self) -> ComResult<bool> {
         match &self.inner {
@@ -113,7 +113,7 @@ impl Clone for DynamicSignal {
     }
 }
 
-impl SignalConcept<Dynamic> for DynamicSignal {
+impl SignalConcept<DynamicAdapter> for DynamicSignal {
     type Emitter = DynamicEmitter;
     type Collector = DynamicCollector;
 
@@ -152,7 +152,7 @@ impl DynamicSignalBuilder {
     }
 }
 
-impl SignalBuilderConcept<Dynamic> for DynamicSignalBuilder {
+impl SignalBuilderConcept<DynamicAdapter> for DynamicSignalBuilder {
     type Signal = DynamicSignal;
 
     fn build(self) -> ComResult<Self::Signal> {
