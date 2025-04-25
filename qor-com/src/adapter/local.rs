@@ -280,6 +280,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "rpcs_supported")]
     fn test_local_rpc() {
         static ADAPTER: std::sync::LazyLock<Local> = std::sync::LazyLock::new(|| Local::new());
 

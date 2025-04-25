@@ -6,8 +6,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::base::*;
 use qor_core::prelude::*;
+
+use crate::base::*;
+use crate::concepts::*;
 
 use std::{fmt::Debug, sync::Arc};
 
@@ -16,15 +18,15 @@ mod signal;
 #[cfg(feature = "signals_supported")]
 pub use signal::*;
 
-#[cfg(feature = "signals_supported")]
-mod event;
-#[cfg(feature = "signals_supported")]
-pub use event::*;
+#[cfg(feature = "topics_supported")]
+mod topic;
+#[cfg(feature = "topics_supported")]
+pub use topic::*;
 
 #[cfg(feature = "rpcs_supported")]
-mod remote_procedure;
+mod rpc;
 #[cfg(feature = "rpcs_supported")]
-pub use remote_procedure::*;
+pub use rpc::*;
 
 //
 // The TransportAdapter implementation
@@ -33,7 +35,7 @@ pub use remote_procedure::*;
 #[derive(Debug)]
 pub struct DynamicStaticConfig {}
 
-impl StaticConfig<Dynamic> for DynamicStaticConfig {
+impl StaticConfigConcept<Dynamic> for DynamicStaticConfig {
     #[inline(always)]
     fn name() -> &'static str {
         "DynamicAdapter"
@@ -60,7 +62,7 @@ pub enum AdapterSelector {
 ///
 /// `Dynamic` will implement this for every supported transport adapter.
 /// The supported adapter should implement the `IntoDynamic` trait to allow the conversion.
-pub trait DynamicNew<T: TransportAdapter> {
+pub trait DynamicNew<T: TransportAdapterConcept> {
     /// Create a new dynamic transport adapter
     fn new(inner: T) -> Dynamic;
 }
@@ -97,7 +99,7 @@ impl Dynamic {
     }
 }
 
-impl Adapter for Dynamic {
+impl AdapterConcept for Dynamic {
     type StaticConfig = DynamicStaticConfig;
 
     fn static_config(&self) -> &'static Self::StaticConfig {
@@ -105,56 +107,61 @@ impl Adapter for Dynamic {
     }
 }
 
-impl TransportAdapter for Dynamic {
+impl TransportAdapterConcept for Dynamic {
     #[cfg(feature = "signals_supported")]
     type SignalBuilder = DynamicSignalBuilder;
 
-    #[cfg(feature = "signals_supported")]
-    type EventBuilder<T>
-        = DynamicEventBuilder<T>
+    #[cfg(feature = "topics_supported")]
+    type TopicBuilder<T>
+        = DynamicTopicBuilder<T>
     where
         T: Debug + Send + TypeTag + Coherent + Reloc;
 
     #[cfg(feature = "rpcs_supported")]
     type RemoteProcedureBuilder<Args, R>
-        = DynamicRemoteProcedureBuilder<Args, R>
+        = DynamicRpcBuilder<Args, R>
     where
         Args: Copy + Send,
         R: Send + Copy + TypeTag + Coherent + Reloc;
 
     /// Create a new event on the local heap
     #[cfg(feature = "signals_supported")]
-    fn signal(&self, label: Label) -> Self::SignalBuilder {
+    fn signal_builder(&self, label: Label) -> Self::SignalBuilder {
         match &self.inner {
             AdapterSelector::Local(inner) => {
-                let builder = inner.signal(label);
+                let builder = inner.signal_builder(label);
                 DynamicSignalBuilder::new(SignalBuilderSelector::Local(builder))
             }
         }
     }
 
     /// Create a new topic on the local heap
-    #[cfg(feature = "signals_supported")]   
-    fn event<T>(&self, label: Label) -> Self::EventBuilder<T>
+    #[cfg(feature = "topics_supported")]
+    fn topic_builder<T>(&self, label: Label) -> Self::TopicBuilder<T>
     where
         T: TypeTag + Coherent + Reloc + Send + Debug,
     {
         match &self.inner {
             AdapterSelector::Local(inner) => {
-                let builder = inner.event::<T>(label);
-                DynamicEventBuilder::new(EventBuilderSelector::Local(builder))
+                let builder = inner.topic_builder::<T>(label);
+                DynamicTopicBuilder::new(TopicBuilderSelector::Local(builder))
             }
         }
     }
 
     /// Create a new remote_procedure_call on the local heap
-    #[cfg(feature = "rpcs_supported")]   
-    fn remote_procedure<Args, R>(&self, label: Label) -> Self::RemoteProcedureBuilder<Args, R>
+    #[cfg(feature = "rpcs_supported")]
+    fn rpc_builder<Args, R>(&self, label: Label) -> Self::RpcBuilder<Args, R>
     where
         Args: Copy + Send,
         R: Send + Copy + TypeTag + Coherent + Reloc,
     {
-        DynamicRemoteProcedureBuilder::new(label)
+        match &self.inner {
+            AdapterSelector::Local(inner) => {
+                let builder = inner.rpc_builder::<_>(label);
+                DynamicRpcBuilder::new(RpcBuilderSelector::Local(builder))
+            }
+        }
     }
 }
 
@@ -167,15 +174,14 @@ mod test {
     use crate::adapter::dynamic::{Dynamic, DynamicNew};
     use crate::adapter::local::Local;
 
-
     #[test]
-    #[cfg(feature = "signals_supported")]   
+    #[cfg(feature = "signals_supported")]
     fn test_dynamic_signal_threading() {
         // ADAPTER as static to avoid lifetime issues in the test thread.
         static ADAPTER: std::sync::LazyLock<Dynamic> =
             std::sync::LazyLock::new(|| Dynamic::new(Local::new()));
 
-        let signal = ADAPTER.signal(Label::INVALID).build().unwrap();
+        let signal = ADAPTER.signal_builder(Label::INVALID).build().unwrap();
 
         let emitter = signal.emitter().unwrap();
         let handle_notifier = std::thread::spawn(move || {
@@ -206,20 +212,20 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "signals_supported")]   
+    #[cfg(feature = "signals_supported")]
     fn test_dynamic_event() {
         let adapter = Dynamic::new(Local::new());
-        let event = adapter
-            .event::<u32>(Label::INVALID)
+        let topic = adapter
+            .topic_builder::<u32>(Label::INVALID)
             .with_queue_depth(4)
             .build()
             .unwrap();
 
-        let publisher = event.publisher().unwrap();
-        let subscriber = event.subscriber().unwrap();
+        let publisher = topic.publisher().unwrap();
+        let subscriber = topic.subscriber().unwrap();
 
         let sample = publisher.loan(42).unwrap();
-        sample.send().unwrap();
+        sample.publish().unwrap();
 
         let sample = subscriber.try_receive().unwrap();
         assert_eq!(sample.is_some(), true);
@@ -242,7 +248,7 @@ mod test {
     type Payload = MyData;
 
     #[cfg(feature = "signals_supported")]
-    fn thread_proc_publish(event: impl Event<Dynamic, Payload>) {
+    fn thread_proc_publish(topic: impl TopicConcept<Dynamic, Payload>) {
         let span = span!(Level::INFO, "[Dynamic] thread_proc_publish");
         let _guard = span.enter();
 
@@ -250,21 +256,21 @@ mod test {
         thread::sleep(Duration::from_millis(1000));
 
         info!("[Dynamic] sending sample");
-        let publisher = event.publisher().unwrap();
+        let publisher = topic.publisher().unwrap();
 
         for i in 0..4 {
             let sample = publisher.loan(Payload { _a: 42, b: i }).unwrap();
-            sample.send().unwrap();
+            sample.publish().unwrap();
         }
     }
 
     #[cfg(feature = "signals_supported")]
-    fn thread_proc_subscribe(event: impl Event<Dynamic, Payload>) -> ComResult<u32> {
+    fn thread_proc_subscribe(topic: impl TopicConcept<Dynamic, Payload>) -> ComResult<u32> {
         let span = span!(Level::INFO, "[Dynamic] thread_proc_subscribe");
         let _guard = span.enter();
 
         info!("[Dynamic] start subscribe");
-        let subscriber = event.subscriber().unwrap();
+        let subscriber = topic.subscriber().unwrap();
 
         info!("[Dynamic] waiting for samples");
         let mut sum = 0;
@@ -283,16 +289,16 @@ mod test {
         static ADAPTER: std::sync::LazyLock<Dynamic> =
             std::sync::LazyLock::new(|| Dynamic::new(Local::new()));
 
-        let event = ADAPTER
-            .event::<Payload>(Label::INVALID)
+        let topic = ADAPTER
+            .topic_builder::<Payload>(Label::INVALID)
             .with_queue_depth(4)
             .build()
             .unwrap();
 
-        let event_clone = event.clone();
+        let event_clone = topic.clone();
         let handle_publisher = std::thread::spawn(move || thread_proc_publish(event_clone));
 
-        let event_clone = event.clone();
+        let event_clone = topic.clone();
         let handle_subscriber = std::thread::spawn(move || thread_proc_subscribe(event_clone));
 
         // wait for both threads

@@ -11,54 +11,44 @@ use qor_core::prelude::*;
 
 use crate::base::*;
 
-use std::{
-    fmt::Debug, ops::{Deref, DerefMut}, sync::Arc, time::Duration
+use crate::types::{
+    PublisherConcept, Sample, SampleConcept, SampleMaybeUninit, SampleMaybeUninitConcept, SampleMut, SampleMutConcept, SubscriberConcept, Topic, TopicBuilder, TopicBuilderConcept, TopicConcept, TopicPublisher, TopicSubscriber
 };
 
-//TODO: check for macro rules to expand future adapters
+use crate::adapter::local::Local as LocalAdapter;
 
-/// Convenience type definitions for local adapter
-mod local {
-    pub(crate) type Adapter = crate::adapter::local::Local;
-    pub(crate) type EventBuilder<T> = <Adapter as crate::base::TransportAdapter>::EventBuilder<T>;
-    pub(crate) type Event<T> =
-        <EventBuilder<T> as crate::base::event::EventBuilder<Adapter, T>>::Event;
-    pub(crate) type EventPublisher<T> =
-        <Event<T> as crate::base::event::Event<Adapter, T>>::Publisher;
-    pub(crate) type EventSubscriber<T> =
-        <Event<T> as crate::base::event::Event<Adapter, T>>::Subscriber;
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+    time::Duration,
+};
 
-    pub(crate) type SampleMaybeUninit<T> =
-        <EventPublisher<T> as crate::base::event::Publisher<Adapter, T>>::SampleMaybeUninit;
-    pub(crate) type SampleMut<T> =
-        <SampleMaybeUninit<T> as crate::base::event::SampleMaybeUninit<Adapter, T>>::SampleMut;
-    pub(crate) type Sample<T> = <SampleMut<T> as crate::base::event::SampleMut<Adapter, T>>::Sample;
-}
+
 
 #[derive(Debug)]
-
-pub(crate) enum EventBuilderSelector<T>
+pub(crate) enum TopicBuilderSelector<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    Local(local::EventBuilder<T>),
+    Local(TopicBuilder<LocalAdapter, T>),
 }
 
 #[derive(Debug)]
-enum EventSelector<T>
+enum TopicSelector<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    Local(Arc<local::Event<T>>),
+    Local(Arc<Topic<LocalAdapter, T>>),
 }
 
-impl<T> Clone for EventSelector<T>
+impl<T> Clone for TopicSelector<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
     fn clone(&self) -> Self {
         match self {
-            EventSelector::Local(inner) => EventSelector::Local(inner.clone()),
+            TopicSelector::Local(inner) => TopicSelector::Local(inner.clone()),
         }
     }
 }
@@ -68,7 +58,7 @@ enum PublisherSelector<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    Local(local::EventPublisher<T>),
+    Local(TopicPublisher<LocalAdapter, T>),
 }
 
 #[derive(Debug)]
@@ -76,7 +66,7 @@ enum SubscriberSelector<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    Local(local::EventSubscriber<T>),
+    Local(TopicSubscriber<LocalAdapter, T>),
 }
 
 #[derive(Debug)]
@@ -84,7 +74,7 @@ enum SampleMaybeUninitSelector<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    Local(local::SampleMaybeUninit<T>),
+    Local(SampleMaybeUninit<LocalAdapter, T>),
 }
 
 #[derive(Debug)]
@@ -92,7 +82,7 @@ enum SampleMutSelector<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    Local(local::SampleMut<T>),
+    Local(SampleMut<LocalAdapter, T>),
 }
 
 #[derive(Debug)]
@@ -100,7 +90,7 @@ enum SampleSelector<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    Local(local::Sample<T>),
+    Local(Sample<LocalAdapter, T>),
 }
 
 #[derive(Debug)]
@@ -123,7 +113,7 @@ where
     }
 }
 
-impl<T> Sample<Dynamic, T> for DynamicSample<T> where T: Debug + Send + TypeTag + Coherent + Reloc {}
+impl<T> SampleConcept<Dynamic, T> for DynamicSample<T> where T: Debug + Send + TypeTag + Coherent + Reloc {}
 
 #[derive(Debug)]
 pub struct DynamicSampleMut<T>
@@ -157,7 +147,7 @@ where
     }
 }
 
-impl<T> SampleMut<Dynamic, T> for DynamicSampleMut<T>
+impl<T> SampleMutConcept<Dynamic, T> for DynamicSampleMut<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -171,9 +161,9 @@ where
         }
     }
 
-    fn send(self) -> ComResult<()> {
+    fn publish(self) -> ComResult<()> {
         match self.inner {
-            SampleMutSelector::Local(inner) => inner.send(),
+            SampleMutSelector::Local(inner) => inner.publish(),
         }
     }
 }
@@ -186,7 +176,7 @@ where
     inner: SampleMaybeUninitSelector<T>,
 }
 
-impl<T> SampleMaybeUninit<Dynamic, T> for DynamicSampleMaybeUninit<T>
+impl<T> SampleMaybeUninitConcept<Dynamic, T> for DynamicSampleMaybeUninit<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -223,7 +213,7 @@ where
     inner: PublisherSelector<T>,
 }
 
-impl<T> Publisher<Dynamic, T> for DynamicPublisher<T>
+impl<T> PublisherConcept<Dynamic, T> for DynamicPublisher<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -248,7 +238,7 @@ where
 {
     inner: SubscriberSelector<T>,
 }
-impl<T> Subscriber<Dynamic, T> for DynamicSubscriber<T>
+impl<T> SubscriberConcept<Dynamic, T> for DynamicSubscriber<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -312,14 +302,14 @@ where
 }
 
 #[derive(Debug)]
-pub struct DynamicEvent<T>
+pub struct DynamicTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    inner: EventSelector<T>,
+    inner: TopicSelector<T>,
 }
 
-impl<T> Clone for DynamicEvent<T>
+impl<T> Clone for DynamicTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -330,7 +320,7 @@ where
     }
 }
 
-impl<T> Event<Dynamic, T> for DynamicEvent<T>
+impl<T> TopicConcept<Dynamic, T> for DynamicTopic<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
@@ -339,7 +329,7 @@ where
 
     fn publisher(&self) -> ComResult<Self::Publisher> {
         match &self.inner {
-            EventSelector::Local(inner) => {
+            TopicSelector::Local(inner) => {
                 let publisher = inner.publisher()?;
                 Ok(DynamicPublisher {
                     inner: PublisherSelector::Local(publisher),
@@ -350,7 +340,7 @@ where
 
     fn subscriber(&self) -> ComResult<Self::Subscriber> {
         match &self.inner {
-            EventSelector::Local(inner) => {
+            TopicSelector::Local(inner) => {
                 let subscriber = inner.subscriber()?;
                 Ok(DynamicSubscriber {
                     inner: SubscriberSelector::Local(subscriber),
@@ -361,35 +351,35 @@ where
 }
 
 #[derive(Debug)]
-pub struct DynamicEventBuilder<T>
+pub struct DynamicTopicBuilder<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    inner: EventBuilderSelector<T>,
+    inner: TopicBuilderSelector<T>,
 }
 
-impl<T> DynamicEventBuilder<T>
+impl<T> DynamicTopicBuilder<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
     #[inline(always)]
-    pub(crate) fn new(inner: EventBuilderSelector<T>) -> Self {
+    pub(crate) fn new(inner: TopicBuilderSelector<T>) -> Self {
         Self { inner }
     }
 }
 
-impl<T> EventBuilder<Dynamic, T> for DynamicEventBuilder<T>
+impl<T> TopicBuilderConcept<Dynamic, T> for DynamicTopicBuilder<T>
 where
     T: Debug + Send + TypeTag + Coherent + Reloc,
 {
-    type Event = DynamicEvent<T>;
+    type Topic = DynamicTopic<T>;
 
     fn with_queue_depth(self, queue_depth: usize) -> Self {
         match self.inner {
-            EventBuilderSelector::Local(inner) => {
+            TopicBuilderSelector::Local(inner) => {
                 let builder = inner.with_queue_depth(queue_depth);
-                DynamicEventBuilder {
-                    inner: EventBuilderSelector::Local(builder),
+                DynamicTopicBuilder {
+                    inner: TopicBuilderSelector::Local(builder),
                 }
             }
         }
@@ -397,41 +387,41 @@ where
 
     fn with_queue_policy(self, queue_policy: QueuePolicy) -> Self {
         match self.inner {
-            EventBuilderSelector::Local(inner) => {
+            TopicBuilderSelector::Local(inner) => {
                 let builder = inner.with_queue_policy(queue_policy);
-                DynamicEventBuilder {
-                    inner: EventBuilderSelector::Local(builder),
+                DynamicTopicBuilder {
+                    inner: TopicBuilderSelector::Local(builder),
                 }
             }
         }
     }
     fn with_max_fan_in(self, max_fan_in: usize) -> Self {
         match self.inner {
-            EventBuilderSelector::Local(inner) => {
+            TopicBuilderSelector::Local(inner) => {
                 let builder = inner.with_max_fan_in(max_fan_in);
-                DynamicEventBuilder {
-                    inner: EventBuilderSelector::Local(builder),
+                DynamicTopicBuilder {
+                    inner: TopicBuilderSelector::Local(builder),
                 }
             }
         }
     }
     fn with_max_fan_out(self, max_fan_out: usize) -> Self {
         match self.inner {
-            EventBuilderSelector::Local(inner) => {
+            TopicBuilderSelector::Local(inner) => {
                 let builder = inner.with_max_fan_out(max_fan_out);
-                DynamicEventBuilder {
-                    inner: EventBuilderSelector::Local(builder),
+                DynamicTopicBuilder {
+                    inner: TopicBuilderSelector::Local(builder),
                 }
             }
         }
     }
 
-    fn build(self) -> ComResult<Self::Event> {
+    fn build(self) -> ComResult<Self::Topic> {
         match self.inner {
-            EventBuilderSelector::Local(inner) => {
+            TopicBuilderSelector::Local(inner) => {
                 let event = inner.build()?;
-                Ok(DynamicEvent {
-                    inner: EventSelector::Local(Arc::new(event)),
+                Ok(DynamicTopic {
+                    inner: TopicSelector::Local(Arc::new(event)),
                 })
             }
         }

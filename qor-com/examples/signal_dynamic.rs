@@ -9,7 +9,6 @@
 #[allow(unused_imports)]
 use qor_core::prelude::*;
 
-
 #[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "signals_supported")]
 use qor_com::prelude::*;
@@ -26,7 +25,7 @@ const CYCLE_TIME: Duration = Duration::from_secs(1);
 /// Here is our emitter thread with Dynamic Emitter in the type agnostic version using `impl Emitter<Dynamic>` 
 #[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "signals_supported")]
-fn emitter_thread(stop_signal: Arc<(AtomicBool, Condvar)>, emitter: impl Emitter<Dynamic>) {
+fn emitter_thread(stop_signal: Arc<(AtomicBool, Condvar)>, emitter: SignalEmitter<Dynamic>) {
     // loop until the stop signal is set
     loop {
         // check the stop signal
@@ -46,7 +45,7 @@ fn emitter_thread(stop_signal: Arc<(AtomicBool, Condvar)>, emitter: impl Emitter
 /// Here is our listener thread with Dynamic Listener in the type explicit version using `DynamicSignalListener`
 #[cfg(feature = "dynamic_adapter")]
 #[cfg(feature = "signals_supported")]
-fn listener_thread(stop_signal: Arc<(AtomicBool, Condvar)>, listener: DynamicCollector) {
+fn collector_thread(stop_signal: Arc<(AtomicBool, Condvar)>, colleector: SignalCollector<Dynamic>) {
     // loop until the stop signal is set
     loop {
         // check the stop signal
@@ -55,7 +54,7 @@ fn listener_thread(stop_signal: Arc<(AtomicBool, Condvar)>, listener: DynamicCol
         }
 
         // wait for the signal
-        match listener.wait_timeout(2 * CYCLE_TIME) {
+        match colleector.wait_timeout(2 * CYCLE_TIME) {
             Ok(true) => {
                 println!("Signal received");
             }
@@ -80,13 +79,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stop_signal = Arc::new((AtomicBool::new(false), Condvar::new()));
 
     // our signal (now through Dynamic)
-    let signal = adapter.signal(Label::INVALID).build()?;
+    let signal = adapter.signal_builder(Label::INVALID).build()?;
 
     // listener and thread
-    let listener = signal.collector()?;
+    let collector = signal.collector()?;
     let stop_clone = stop_signal.clone();
-    let listen = std::thread::spawn(move || {
-        listener_thread(stop_clone, listener);
+    let collect = std::thread::spawn(move || {
+        collector_thread(stop_clone, collector);
     });
 
     // emitter and thread
@@ -102,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // wait for the threads to finish
     emit.join().unwrap();
-    listen.join().unwrap();
+    collect.join().unwrap();
     println!("Threads joined");
 
     Ok(())

@@ -174,5 +174,5 @@ where
     T: TransportAdapterConcept,
 {
     /// Convert the adapter into a dynamic adapter.
-    fn into_dynamic(self) -> super::adapter::dynamic::Dynamic;
+    fn into_dynamic(self) -> crate::adapter::dynamic::Dynamic;
 }

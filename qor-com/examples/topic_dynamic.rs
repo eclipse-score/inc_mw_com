@@ -49,7 +49,7 @@ unsafe impl Reloc for Payload {}
 #[cfg(feature = "signals_supported")]
 fn publisher_thread(
     stop_signal: Arc<(AtomicBool, Condvar)>,
-    publisher: impl Publisher<Dynamic, Payload>,
+    publisher: TopicPublisher<Dynamic, Payload>,
 ) {
     // loop until the stop signal is set
     let mut counter: u32 = 0;
@@ -87,7 +87,7 @@ fn publisher_thread(
 #[cfg(feature = "signals_supported")]
 fn subscriber_thread(
     stop_signal: Arc<(AtomicBool, Condvar)>,
-    subscriber: DynamicSubscriber<Payload>,
+    subscriber: TopicSubscriber<Dynamic, Payload>,
 ) {
     // loop until the stop signal is set
     loop {
@@ -122,17 +122,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stop_signal = Arc::new((AtomicBool::new(false), Condvar::new()));
 
     // our event (now through Dynamic)
-    let event = adapter.event::<Payload>(Label::new("DemoEvent")).build()?;
+    let topic = adapter.topic_builder::<Payload>(Label::new("DemoEvent")).build()?;
 
     // subscriber and thread
-    let subscriber = signal.subscriber()?;
+    let subscriber = topic.subscriber()?;
     let stop_clone = stop_signal.clone();
     let subscribe = std::thread::spawn(move || {
         subscriber_thread(stop_clone, subscriber);
     });
 
     // publisher and thread
-    let publisher = signal.publisher()?;
+    let publisher = topic.publisher()?;
     let stop_clone = stop_signal.clone();
     let publish = std::thread::spawn(move || {
         publisher_thread(stop_clone, publisher);

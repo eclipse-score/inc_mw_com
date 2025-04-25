@@ -6,29 +6,21 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
-use crate::base::signal::{ Emitter, Collector };
+
+use crate::types::{Signal, SignalBuilder, SignalCollector, SignalEmitter};
+
+use crate::adapter::local::Local as LocalAdapter;
 
 use std::time::Duration;
 
-//TODO: check for macro rules to expand future adapters
-
-/// Convenience type definitions for local adapter
-mod local {
-    pub(crate) type Adapter = crate::adapter::local::Local;
-    pub(crate) type Builder = <Adapter as crate::base::TransportAdapter>::SignalBuilder;
-    pub(crate) type Signal = <Builder as crate::base::SignalBuilder<Adapter>>::Signal;
-    pub(crate) type Emitter = <Signal as crate::base::Signal<Adapter>>::Emitter;
-    pub(crate) type Listener = <Signal as crate::base::Signal<Adapter>>::Collector;
-}
-
 #[derive(Debug)]
 pub(crate) enum SignalBuilderSelector {
-    Local(local::Builder),
+    Local(SignalBuilder<LocalAdapter>),
 }
 
 #[derive(Debug)]
 enum SignalSelector {
-    Local(Arc<local::Signal>),
+    Local(Arc<Signal<LocalAdapter>>),
 }
 
 impl Clone for SignalSelector {
@@ -41,12 +33,12 @@ impl Clone for SignalSelector {
 
 #[derive(Debug)]
 enum EmitterSelector {
-    Local(local::Emitter),
+    Local(SignalEmitter<LocalAdapter>),
 }
 
 #[derive(Debug)]
 enum CollectorSelector {
-    Local(local::Listener),
+    Local(SignalCollector<LocalAdapter>),
 }
 
 #[derive(Debug)]
@@ -54,7 +46,7 @@ pub struct DynamicEmitter {
     inner: EmitterSelector,
 }
 
-impl Emitter<Dynamic> for DynamicEmitter {
+impl EmitterConcept<Dynamic> for DynamicEmitter {
     // Notify the event by setting the flag and waking up all listeners
     fn emit(&self) {
         match &self.inner {
@@ -68,7 +60,7 @@ pub struct DynamicCollector {
     inner: CollectorSelector,
 }
 
-impl Collector<Dynamic> for DynamicCollector {
+impl CollectorConcept<Dynamic> for DynamicCollector {
     #[inline(always)]
     fn check(&self) -> ComResult<bool> {
         match &self.inner {
@@ -121,7 +113,7 @@ impl Clone for DynamicSignal {
     }
 }
 
-impl Signal<Dynamic> for DynamicSignal {
+impl SignalConcept<Dynamic> for DynamicSignal {
     type Emitter = DynamicEmitter;
     type Collector = DynamicCollector;
 
@@ -160,7 +152,7 @@ impl DynamicSignalBuilder {
     }
 }
 
-impl SignalBuilder<Dynamic> for DynamicSignalBuilder {
+impl SignalBuilderConcept<Dynamic> for DynamicSignalBuilder {
     type Signal = DynamicSignal;
 
     fn build(self) -> ComResult<Self::Signal> {

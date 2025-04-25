@@ -12,7 +12,7 @@ tracing-subscriber = "0.3"
 iceoryx2 = "0.5.0"
 
 [features]
-default = ["signals_supported", "topics_supported", "rpcs_supported"]
+default = ["signals_supported", "topics_supported", "dynamic_adapter"]
 signals_supported = []
 variables_supported = []
 topics_supported = []

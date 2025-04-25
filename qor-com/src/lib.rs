@@ -341,13 +341,13 @@ pub mod types {
     pub use crate::concepts::*;
 
     #[cfg(feature = "signals_supported")]
-    type SignalBuilder<A> = <A as TransportAdapterConcept>::SignalBuilder;
+    pub type SignalBuilder<A> = <A as TransportAdapterConcept>::SignalBuilder;
     #[cfg(feature = "signals_supported")]
-    type Signal<A> = <SignalBuilder<A> as SignalBuilderConcept<A>>::Signal;
+    pub type Signal<A> = <SignalBuilder<A> as SignalBuilderConcept<A>>::Signal;
     #[cfg(feature = "signals_supported")]
-    type SignalEmitter<A> = <Signal<A> as SignalConcept<A>>::Emitter;
+    pub type SignalEmitter<A> = <Signal<A> as SignalConcept<A>>::Emitter;
     #[cfg(feature = "signals_supported")]
-    type SignalReceiver<A> = <Signal<A> as SignalConcept<A>>::Collector;
+    pub type SignalCollector<A> = <Signal<A> as SignalConcept<A>>::Collector;
 
     #[cfg(feature = "topics_supported")]
     pub type TopicBuilder<A, T> = <A as TransportAdapterConcept>::TopicBuilder<T>;
