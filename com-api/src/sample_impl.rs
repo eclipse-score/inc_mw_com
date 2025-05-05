@@ -11,73 +11,21 @@
 
 #![allow(dead_code)]
 
-use crate::{
-    Builder, ConsumerBuilder, Instance, InstanceSpecifier, Interface, ProducerBuilder, Reloc,
-    SampleInstance,
-};
+use crate::{Builder, Instance, InstanceSpecifier, Interface, Reloc, SampleInstance};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::time::Duration;
 
-pub struct DefaultInstance<I: Interface> {
-    instance_id: InstanceSpecifier,
-    _phantom_data: PhantomData<I>,
-}
-
-/*impl<I: Interface> Instance<I> for DefaultInstance<I> {
-    fn instance_id(&self) -> &InstanceSpecifier {
-        &self.instance_id
-    }
-
-    fn producer(&self) -> crate::Result<<I as Interface>::Producer> {
-        Ok(<I as Interface>::producer(&self.instance_id))
-    }
-
-    fn consumer(&self) -> crate::Result<<I as Interface>::Consumer> {
-        Ok(<I as Interface>::consumer(&self.instance_id))
-    }
-}
-
-pub struct DefaultInstanceBuilder<I: Interface> {
-    instance_id: InstanceSpecifier,
-    _phantom_data: PhantomData<I>,
-}
-
-impl<I: Interface> Builder for DefaultInstanceBuilder<I> {
-    type Output = DefaultInstance<I>;
-    fn build(self) -> crate::Result<Self::Output> {
-        Ok(DefaultInstance {
-            instance_id: self.instance_id,
-            _phantom_data: PhantomData,
-        })
-    }
-}
-impl<I: Interface> InstanceBuilder<I> for DefaultInstanceBuilder<I> {
-    fn key_str(mut self, key: &str, value: &str) -> Self {
-        todo!();
-        self
-    }
-}
-
-impl<I: Interface> DefaultInstanceBuilder<I> {
-    pub fn new(instance_id: InstanceSpecifier) -> Self {
-        Self {
-            instance_id,
-            _phantom_data: PhantomData,
-        }
-    }
-}
-*/
-
-struct SampleInstanceImpl<I: Interface> {
+pub struct SampleInstanceImpl<I: Interface> {
     _interface: PhantomData<I>,
+    instance_specifier: InstanceSpecifier,
 }
 
-impl<I: Interface> Instance<I> for SampleInstanceImpl<I>
+impl<I> Instance<I> for SampleInstanceImpl<I>
 where
-    I: SampleInstance<I>,
+    I: SampleInstance<I> + Interface,
 {
     type ProducerBuilder = <I as SampleInstance<I>>::ProducerBuilder;
     type ConsumerBuilder = <I as SampleInstance<I>>::ConsumerBuilder;
@@ -93,8 +41,11 @@ where
 
 pub struct RuntimeImpl {}
 impl crate::Runtime for RuntimeImpl {
-    type InstanceSpecifier = crate::InstanceSpecifier;
-    type Instance<I>
+    type InstanceSpecifier = InstanceSpecifier;
+
+    // TBD: Impl for the to-be-done link between (runtime-agnostic) interface and (runtime.aware) instance
+
+    /* type Instance<I>
         = SampleInstanceImpl<I>
     where
         I: Interface;
@@ -104,6 +55,18 @@ impl crate::Runtime for RuntimeImpl {
         instance_specifier: Self::InstanceSpecifier,
     ) -> Self::Instance<I> {
         <I as SampleInstance<I>>::new(instance_specifier)
+    } */
+}
+
+impl RuntimeImpl {
+    pub fn make_instance<I: Interface + SampleInstance<I>>(
+        &self,
+        instance_specifier: <Self as crate::Runtime>::InstanceSpecifier,
+    ) -> SampleInstanceImpl<I> {
+        SampleInstanceImpl {
+            _interface: PhantomData,
+            instance_specifier,
+        }
     }
 }
 

@@ -42,11 +42,9 @@
 
 use crate::sample_impl::{Publisher, Subscriber};
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
-use std::process::Output;
 
 #[derive(Debug)]
 pub enum Error {
@@ -66,6 +64,8 @@ pub trait Builder {
 pub trait Runtime {
     type InstanceSpecifier;
 
+    // TBD: HOW?!?
+    /*
     type Instance<I>: Instance<I>
     where
         I: Interface;
@@ -73,7 +73,7 @@ pub trait Runtime {
     fn make_instance<I: Interface>(
         &self,
         instance_specifier: Self::InstanceSpecifier,
-    ) -> Self::Instance<I>;
+    ) -> Self::Instance<I>;*/
 }
 
 pub trait RuntimeBuilder: Builder
@@ -157,7 +157,7 @@ where
     unsafe fn assume_init(self) -> Self::SampleMut;
 }
 
-struct InstanceSpecifier {}
+pub struct InstanceSpecifier {}
 
 // interface Auto {
 //     linkes_rad: Event<Rad>,
@@ -169,8 +169,8 @@ struct Rad {}
 
 struct Auspuff {}
 
-trait ProducerBuilder: Builder {}
-trait ConsumerBuilder: Builder {}
+pub trait ProducerBuilder: Builder {}
+pub trait ConsumerBuilder: Builder {}
 
 pub trait Interface {}
 
@@ -269,8 +269,8 @@ mod test {
         let runtime = runtime_builder.build().unwrap();
         let builder = runtime.make_instance::<AutoInterface>(InstanceSpecifier {});
         //.key_str("key", "value");
-        let producer = builder.producer().build().unwrap();
-        let consumer = builder.consumer().build().unwrap();
+        let _producer = builder.producer().build().unwrap();
+        let _consumer = builder.consumer().build().unwrap();
     }
 
     #[test]
