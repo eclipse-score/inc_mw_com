@@ -6,3 +6,6 @@ publish = ["common"]
 license = "Apache-2.0"
 
 [dependencies]
+
+[dev-dependencies]
+futures = { version = "0.3", features = ["executor"] }

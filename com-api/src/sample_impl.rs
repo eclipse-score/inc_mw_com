@@ -11,23 +11,56 @@
 
 #![allow(dead_code)]
 
-use crate::Reloc;
+use crate::{Builder, Error, InstanceSpecifier, Interface, Reloc};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
-use std::time::Duration;
+use std::time::SystemTime;
+
+pub struct SampleInstanceImpl<I: Interface> {
+    _interface: PhantomData<I>,
+    instance_specifier: InstanceSpecifier,
+}
 
 pub struct RuntimeImpl {}
-impl crate::Runtime for RuntimeImpl {}
+impl crate::Runtime for RuntimeImpl {
+    type InstanceSpecifier = InstanceSpecifier;
+
+    // TBD: Impl for the to-be-done link between (runtime-agnostic) interface and (runtime.aware) instance
+
+    /* type Instance<I>
+        = SampleInstanceImpl<I>
+    where
+        I: Interface;
+
+    fn make_instance<I: Interface>(
+        &self,
+        instance_specifier: Self::InstanceSpecifier,
+    ) -> Self::Instance<I> {
+        <I as SampleInstance<I>>::new(instance_specifier)
+    } */
+}
+
+impl RuntimeImpl {
+    pub fn make_instance<I: Interface>(
+        &self,
+        instance_specifier: <Self as crate::Runtime>::InstanceSpecifier,
+    ) -> SampleInstanceImpl<I> {
+        SampleInstanceImpl {
+            _interface: PhantomData,
+            instance_specifier,
+        }
+    }
+}
 
 pub struct RuntimeBuilderImpl {}
 
 /// Generic trait for all "factory-like" types
-impl crate::Builder for RuntimeBuilderImpl {
+impl Builder for RuntimeBuilderImpl {
     type Output = RuntimeImpl;
-    fn build(self) -> Self::Output {
-        Self::Output {}
+    fn build(self) -> crate::Result<Self::Output> {
+        Ok(Self::Output {})
     }
 }
 
@@ -40,8 +73,8 @@ impl crate::RuntimeBuilder for RuntimeBuilderImpl {
 
 impl RuntimeBuilderImpl {
     /// Creates a new instance of the default implementation of the com layer
-    pub fn new() -> crate::Result<Self> {
-        Ok(Self {})
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
@@ -186,11 +219,9 @@ where
     }
 
     unsafe fn assume_init(self) -> SampleMut<'a, T> {
-        unsafe {
-            SampleMut {
-                data: unsafe { self.data.assume_init() },
-                _lifetime: PhantomData,
-            }
+        SampleMut {
+            data: unsafe { self.data.assume_init() },
+            _lifetime: PhantomData,
         }
     }
 }
@@ -215,27 +246,51 @@ where
     }
 }
 
-pub enum WaitResult {
-    SamplesAvailable,
-    Expired,
+pub trait Subscriber<T: Reloc + Send> {
+    fn receive_blocking(&self) -> super::Result<Sample<T>>;
+    fn try_receive(&self) -> super::Result<Option<Sample<T>>>;
+    fn receive_until(&self, until: SystemTime) -> super::Result<Sample<T>>;
+    /*fn next<'a>(&'a self) -> impl Future<Output = super::Result<Sample<'a, T>>>
+    where
+        T: 'a;*/
+    async fn receive<'a>(&'a self) -> super::Result<Sample<'a, T>>
+    where
+        T: 'a;
 }
 
-pub struct Subscriber<T> {
+pub struct SubscriberImpl<T> {
     _data: PhantomData<T>,
 }
 
-impl<T> Subscriber<T>
+impl<T> SubscriberImpl<T>
 where
     T: Reloc + Send,
 {
     pub fn new() -> Self {
         Self { _data: PhantomData }
     }
-    pub fn next(&self) -> super::Result<Option<Sample<T>>> {
+}
+
+impl<T> Subscriber<T> for SubscriberImpl<T>
+where
+    T: Reloc + Send,
+{
+    fn receive_blocking(&self) -> super::Result<Sample<T>> {
+        Err(Error::Fail)
+    }
+
+    fn try_receive(&self) -> super::Result<Option<Sample<T>>> {
         Ok(None)
     }
 
-    pub fn wait(&self, _timeout: Option<Duration>) -> WaitResult {
-        WaitResult::Expired
+    fn receive_until(&self, _until: SystemTime) -> super::Result<Sample<T>> {
+        Err(Error::Timeout)
+    }
+
+    async fn receive<'a>(&'a self) -> crate::Result<Sample<'a, T>>
+    where
+        T: 'a,
+    {
+        Err(Error::Fail)
     }
 }

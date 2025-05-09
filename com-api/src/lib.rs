@@ -47,7 +47,9 @@ use std::path::Path;
 
 #[derive(Debug)]
 pub enum Error {
+    /// TODO: To be replaced, dummy value for "something went wrong"
     Fail,
+    Timeout,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -55,12 +57,25 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub trait Builder {
     type Output;
     /// Open point: Should this be &mut self so that this can be turned into a trait object?
-    fn build(self) -> Self::Output;
+    fn build(self) -> Result<Self::Output>;
 }
 
 /// This represents the com implementation and acts as a root for all types and objects provided by
 /// the implementation.
-pub trait Runtime {}
+pub trait Runtime {
+    type InstanceSpecifier;
+
+    // TODO: HOW?!?
+    /*
+    type Instance<I>: Instance<I>
+    where
+        I: Interface;
+
+    fn make_instance<I: Interface>(
+        &self,
+        instance_specifier: Self::InstanceSpecifier,
+    ) -> Self::Instance<I>;*/
+}
 
 pub trait RuntimeBuilder: Builder
 where
@@ -143,31 +158,69 @@ where
     unsafe fn assume_init(self) -> Self::SampleMut;
 }
 
+pub struct InstanceSpecifier {}
+
+pub trait Interface {}
+
+pub trait ProducerBuilder<R: Runtime>: Builder {}
+pub trait ConsumerBuilder<R: Runtime>: Builder {}
+
+pub trait Instance<R: Runtime> {
+    type ProducerBuilder: ProducerBuilder<R>;
+    type ConsumerBuilder: ConsumerBuilder<R>;
+
+    fn producer(&self) -> Self::ProducerBuilder;
+    fn consumer(&self) -> Self::ConsumerBuilder;
+}
+
+/// Generic
 mod sample_impl;
+mod sample_interface;
 
 #[cfg(test)]
 mod test {
-    use super::{Builder, SampleMaybeUninit, SampleMut};
-    use std::time::Duration;
+    use super::*;
+    use crate::sample_impl::*;
+    use std::time::{Duration, SystemTime};
+
+    #[test]
+    fn create_producer() {
+        let runtime_builder = sample_impl::RuntimeBuilderImpl::new();
+        let runtime = runtime_builder.build().unwrap();
+        let builder =
+            runtime.make_instance::<sample_interface::AutoInterface>(InstanceSpecifier {});
+        //.key_str("key", "value");
+        let _producer = builder.producer().build().unwrap();
+        let _consumer = builder.consumer().build().unwrap();
+    }
 
     #[test]
     fn receive_stuff() {
-        let test_subscriber = crate::sample_impl::Subscriber::<u32>::new();
+        let test_subscriber = crate::sample_impl::SubscriberImpl::<u32>::new();
         for _ in 0..10 {
-            match test_subscriber.wait(Some(Duration::from_secs(5))) {
-                crate::sample_impl::WaitResult::SamplesAvailable => match test_subscriber.next() {
-                    Ok(Some(sample)) => println!("{}", *sample),
-                    Ok(None) => println!("Nothing"),
-                    Err(e) => eprintln!("{:?}", e),
-                },
-                crate::sample_impl::WaitResult::Expired => println!("No sample received"),
+            match test_subscriber.receive_until(SystemTime::now() + Duration::from_secs(5)) {
+                Ok(sample) => println!("{}", *sample),
+                Err(Error::Timeout) => panic!("No sample received"),
+                Err(e) => panic!("{:?}", e),
             }
         }
     }
 
     #[test]
+    fn receive_async_stuff() {
+        let test_subscriber = crate::sample_impl::SubscriberImpl::<u32>::new();
+        // block on an asynchronous reception of data from test_subscriber
+        futures::executor::block_on(async {
+            match test_subscriber.receive().await {
+                Ok(sample) => println!("{}", *sample),
+                Err(e) => panic!("{:?}", e),
+            }
+        })
+    }
+
+    #[test]
     fn send_stuff() {
-        let test_publisher = crate::sample_impl::Publisher::new();
+        let test_publisher = Publisher::new();
         for _ in 0..5 {
             let sample = test_publisher.allocate();
             match sample {
@@ -191,8 +244,5 @@ mod test {
     }
 
     #[test]
-    fn build_production_runtime() {
-        let runtime_builder = crate::sample_impl::RuntimeBuilderImpl::new();
-        let _runtime = runtime_builder.build();
-    }
+    fn build_production_runtime() {}
 }
