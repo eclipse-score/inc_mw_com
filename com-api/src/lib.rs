@@ -40,7 +40,6 @@
 //! - Structures
 //! - Tuples
 
-use crate::sample_impl::{Publisher, Subscriber};
 use std::fmt::Debug;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
@@ -48,7 +47,9 @@ use std::path::Path;
 
 #[derive(Debug)]
 pub enum Error {
+    /// TODO: To be replaced, dummy value for "something went wrong"
     Fail,
+    Timeout,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -64,7 +65,7 @@ pub trait Builder {
 pub trait Runtime {
     type InstanceSpecifier;
 
-    // TBD: HOW?!?
+    // TODO: HOW?!?
     /*
     type Instance<I>: Instance<I>
     where
@@ -159,115 +160,35 @@ where
 
 pub struct InstanceSpecifier {}
 
-// interface Auto {
-//     linkes_rad: Event<Rad>,
-//     auspuff: Event<Auspuff>,
-//     set_blinker_zustand: FnMut(blinkmodus: BlinkModus) -> Result<bool>,
-// }
-
-struct Rad {}
-
-struct Auspuff {}
-
-pub trait ProducerBuilder: Builder {}
-pub trait ConsumerBuilder: Builder {}
-
 pub trait Interface {}
 
-pub trait Instance<I: Interface> {
-    type ProducerBuilder: ProducerBuilder;
-    type ConsumerBuilder: ConsumerBuilder;
+pub trait ProducerBuilder<R: Runtime>: Builder {}
+pub trait ConsumerBuilder<R: Runtime>: Builder {}
 
-    fn producer(&self) -> Self::ProducerBuilder;
-    fn consumer(&self) -> Self::ConsumerBuilder;
-}
-
-pub trait SampleInstance<I: Interface> {
-    type Instance;
-    fn new(instance_specifier: InstanceSpecifier) -> Self::Instance;
-    type ProducerBuilder: ProducerBuilder;
-    type ConsumerBuilder: ConsumerBuilder;
+pub trait Instance<R: Runtime> {
+    type ProducerBuilder: ProducerBuilder<R>;
+    type ConsumerBuilder: ConsumerBuilder<R>;
 
     fn producer(&self) -> Self::ProducerBuilder;
     fn consumer(&self) -> Self::ConsumerBuilder;
 }
 
 /// Generic
-struct AutoInterface {}
-
-/// Generic
-impl Interface for AutoInterface {}
-
-/// Runtime specific
-struct AutoInstance {
-    instance_specifier: InstanceSpecifier,
-}
-
-impl SampleInstance<AutoInterface> for AutoInterface {
-    type Instance = AutoInstance;
-
-    fn new(instance_specifier: InstanceSpecifier) -> Self::Instance {
-        AutoInstance { instance_specifier }
-    }
-
-    type ProducerBuilder = AutoProducerBuilder;
-    type ConsumerBuilder = AutoConsumerBuilder;
-
-    fn producer(&self) -> Self::ProducerBuilder {
-        AutoProducerBuilder {}
-    }
-
-    fn consumer(&self) -> Self::ConsumerBuilder {
-        AutoConsumerBuilder {}
-    }
-}
-
-struct AutoProducerBuilder {}
-
-impl Builder for AutoProducerBuilder {
-    type Output = AutoProducer;
-
-    fn build(self) -> Result<Self::Output> {
-        todo!()
-    }
-}
-
-impl ProducerBuilder for AutoProducerBuilder {}
-
-struct AutoConsumerBuilder {}
-
-impl Builder for AutoConsumerBuilder {
-    type Output = AutoConsumer;
-
-    fn build(self) -> Result<Self::Output> {
-        todo!()
-    }
-}
-
-impl ConsumerBuilder for AutoConsumerBuilder {}
-
-struct AutoProducer {
-    linkes_rad: Publisher<Rad>,
-    auspuff: Publisher<Auspuff>,
-}
-
-struct AutoConsumer {
-    linkes_rad: Subscriber<Rad>,
-    auspuff: Subscriber<Auspuff>,
-}
-
 mod sample_impl;
+mod sample_interface;
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::time::Duration;
+    use crate::sample_impl::*;
+    use std::time::{Duration, SystemTime};
 
     #[test]
     fn create_producer() {
         let runtime_builder = sample_impl::RuntimeBuilderImpl::new();
         let runtime = runtime_builder.build().unwrap();
-        let builder = runtime.make_instance::<AutoInterface>(InstanceSpecifier {});
+        let builder =
+            runtime.make_instance::<sample_interface::AutoInterface>(InstanceSpecifier {});
         //.key_str("key", "value");
         let _producer = builder.producer().build().unwrap();
         let _consumer = builder.consumer().build().unwrap();
@@ -275,22 +196,31 @@ mod test {
 
     #[test]
     fn receive_stuff() {
-        let test_subscriber = crate::sample_impl::Subscriber::<u32>::new();
+        let test_subscriber = crate::sample_impl::SubscriberImpl::<u32>::new();
         for _ in 0..10 {
-            match test_subscriber.wait(Some(Duration::from_secs(5))) {
-                crate::sample_impl::WaitResult::SamplesAvailable => match test_subscriber.next() {
-                    Ok(Some(sample)) => println!("{}", *sample),
-                    Ok(None) => println!("Nothing"),
-                    Err(e) => eprintln!("{:?}", e),
-                },
-                crate::sample_impl::WaitResult::Expired => println!("No sample received"),
+            match test_subscriber.receive_until(SystemTime::now() + Duration::from_secs(5)) {
+                Ok(sample) => println!("{}", *sample),
+                Err(Error::Timeout) => panic!("No sample received"),
+                Err(e) => panic!("{:?}", e),
             }
         }
     }
 
     #[test]
+    fn receive_async_stuff() {
+        let test_subscriber = crate::sample_impl::SubscriberImpl::<u32>::new();
+        // block on an asynchronous reception of data from test_subscriber
+        futures::executor::block_on(async {
+            match test_subscriber.receive().await {
+                Ok(sample) => println!("{}", *sample),
+                Err(e) => panic!("{:?}", e),
+            }
+        })
+    }
+
+    #[test]
     fn send_stuff() {
-        let test_publisher = crate::sample_impl::Publisher::new();
+        let test_publisher = Publisher::new();
         for _ in 0..5 {
             let sample = test_publisher.allocate();
             match sample {
