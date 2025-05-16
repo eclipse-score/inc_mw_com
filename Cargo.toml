@@ -1,3 +1,3 @@
 [workspace]
-members = ["com-api", "com-api-example"]
+members = ["com-api", "com-api-example", "com-api-sample-instance", "com-api-sample-interface", "com-api-sample-runtime"]
 resolver = "3"

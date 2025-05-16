@@ -11,13 +11,40 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 [[package]]
 name = "com-api"
 version = "0.1.0"
-dependencies = [
- "futures",
-]
 
 [[package]]
 name = "com-api-example"
 version = "0.1.0"
+dependencies = [
+ "com-api",
+ "com-api-sample-instance",
+ "com-api-sample-interface",
+ "com-api-sample-runtime",
+ "futures",
+]
+
+[[package]]
+name = "com-api-sample-instance"
+version = "0.1.0"
+dependencies = [
+ "com-api",
+ "com-api-sample-interface",
+ "com-api-sample-runtime",
+]
+
+[[package]]
+name = "com-api-sample-interface"
+version = "0.1.0"
+dependencies = [
+ "com-api",
+]
+
+[[package]]
+name = "com-api-sample-runtime"
+version = "0.1.0"
+dependencies = [
+ "com-api",
+]
 
 [[package]]
 name = "futures"

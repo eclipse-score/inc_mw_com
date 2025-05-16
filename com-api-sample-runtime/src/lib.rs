@@ -11,61 +11,35 @@
 
 #![allow(dead_code)]
 
-use crate::{Builder, Error, InstanceSpecifier, Interface, Reloc};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::time::SystemTime;
 
-pub struct SampleInstanceImpl<I: Interface> {
-    _interface: PhantomData<I>,
-    instance_specifier: InstanceSpecifier,
-}
+use com_api::{Builder, Reloc, Runtime, Subscriber};
+
+pub struct InstanceSpecifier {}
 
 pub struct RuntimeImpl {}
-impl crate::Runtime for RuntimeImpl {
+impl Runtime for RuntimeImpl {
     type InstanceSpecifier = InstanceSpecifier;
-
-    // TBD: Impl for the to-be-done link between (runtime-agnostic) interface and (runtime.aware) instance
-
-    /* type Instance<I>
-        = SampleInstanceImpl<I>
-    where
-        I: Interface;
-
-    fn make_instance<I: Interface>(
-        &self,
-        instance_specifier: Self::InstanceSpecifier,
-    ) -> Self::Instance<I> {
-        <I as SampleInstance<I>>::new(instance_specifier)
-    } */
 }
 
-impl RuntimeImpl {
-    pub fn make_instance<I: Interface>(
-        &self,
-        instance_specifier: <Self as crate::Runtime>::InstanceSpecifier,
-    ) -> SampleInstanceImpl<I> {
-        SampleInstanceImpl {
-            _interface: PhantomData,
-            instance_specifier,
-        }
-    }
-}
+impl RuntimeImpl {}
 
 pub struct RuntimeBuilderImpl {}
 
 /// Generic trait for all "factory-like" types
 impl Builder for RuntimeBuilderImpl {
     type Output = RuntimeImpl;
-    fn build(self) -> crate::Result<Self::Output> {
+    fn build(self) -> com_api::Result<Self::Output> {
         Ok(Self::Output {})
     }
 }
 
 /// Entry point for the default implementation for the com module of s-core
-impl crate::RuntimeBuilder for RuntimeBuilderImpl {
+impl com_api::RuntimeBuilder for RuntimeBuilderImpl {
     fn load_config(&mut self, _config: &Path) -> &mut Self {
         self
     }
@@ -132,7 +106,7 @@ where
     }
 }
 
-impl<'a, T> super::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
+impl<'a, T> com_api::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
 
 pub struct SampleMut<'a, T>
 where
@@ -142,7 +116,7 @@ where
     _lifetime: PhantomData<&'a T>,
 }
 
-impl<'a, T> crate::SampleMut<T> for SampleMut<'a, T>
+impl<'a, T> com_api::SampleMut<T> for SampleMut<'a, T>
 where
     T: Reloc + Send,
 {
@@ -152,7 +126,7 @@ where
         todo!()
     }
 
-    fn send(self) -> crate::Result<()> {
+    fn send(self) -> com_api::Result<()> {
         todo!()
     }
 }
@@ -179,7 +153,7 @@ where
 
 pub struct SampleMaybeUninit<'a, T>
 where
-    T: crate::Reloc + Send,
+    T: com_api::Reloc + Send,
 {
     data: MaybeUninit<T>,
     _lifetime: PhantomData<&'a T>,
@@ -205,7 +179,7 @@ where
     }
 }
 
-impl<'a, T> crate::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
+impl<'a, T> com_api::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
 where
     T: Reloc + Send,
 {
@@ -218,44 +192,12 @@ where
         }
     }
 
-    unsafe fn assume_init(self) -> SampleMut<'a, T> {
+    unsafe fn assume_init_2(self) -> SampleMut<'a, T> {
         SampleMut {
             data: unsafe { self.data.assume_init() },
             _lifetime: PhantomData,
         }
     }
-}
-
-pub struct Publisher<T> {
-    _data: PhantomData<T>,
-}
-
-impl<T> Publisher<T>
-where
-    T: Reloc + Send,
-{
-    pub fn new() -> Self {
-        Self { _data: PhantomData }
-    }
-
-    pub fn allocate(&self) -> super::Result<SampleMaybeUninit<T>> {
-        Ok(SampleMaybeUninit {
-            data: MaybeUninit::uninit(),
-            _lifetime: PhantomData,
-        })
-    }
-}
-
-pub trait Subscriber<T: Reloc + Send> {
-    fn receive_blocking(&self) -> super::Result<Sample<T>>;
-    fn try_receive(&self) -> super::Result<Option<Sample<T>>>;
-    fn receive_until(&self, until: SystemTime) -> super::Result<Sample<T>>;
-    /*fn next<'a>(&'a self) -> impl Future<Output = super::Result<Sample<'a, T>>>
-    where
-        T: 'a;*/
-    async fn receive<'a>(&'a self) -> super::Result<Sample<'a, T>>
-    where
-        T: 'a;
 }
 
 pub struct SubscriberImpl<T> {
@@ -273,24 +215,44 @@ where
 
 impl<T> Subscriber<T> for SubscriberImpl<T>
 where
-    T: Reloc + Send,
+    T: Reloc + Send + Sync,
 {
-    fn receive_blocking(&self) -> super::Result<Sample<T>> {
-        Err(Error::Fail)
+    fn receive_blocking(&self) -> com_api::Result<impl com_api::Sample<T>> {
+        Err::<Sample<T>, _>(com_api::Error::Fail)
     }
 
-    fn try_receive(&self) -> super::Result<Option<Sample<T>>> {
-        Ok(None)
+    fn try_receive(&self) -> com_api::Result<Option<impl com_api::Sample<T>>> {
+        Ok(None::<Sample<T>>)
     }
 
-    fn receive_until(&self, _until: SystemTime) -> super::Result<Sample<T>> {
-        Err(Error::Timeout)
+    fn receive_until(&self, _until: SystemTime) -> com_api::Result<impl com_api::Sample<T>> {
+        Err::<Sample<T>, _>(com_api::Error::Timeout)
     }
 
-    async fn receive<'a>(&'a self) -> crate::Result<Sample<'a, T>>
+    async fn receive<'a>(&'a self) -> com_api::Result<impl com_api::Sample<T> + 'a>
     where
         T: 'a,
     {
-        Err(Error::Fail)
+        Err::<Sample<T>, com_api::Error>(com_api::Error::Fail)
+    }
+}
+
+pub struct Publisher<T> {
+    _data: PhantomData<T>,
+}
+
+impl<T> Publisher<T>
+where
+    T: Reloc + Send,
+{
+    pub fn new() -> Self {
+        Self { _data: PhantomData }
+    }
+
+    pub fn allocate(&self) -> com_api::Result<SampleMaybeUninit<T>> {
+        Ok(SampleMaybeUninit {
+            data: MaybeUninit::uninit(),
+            _lifetime: PhantomData,
+        })
     }
 }

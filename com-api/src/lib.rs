@@ -44,6 +44,7 @@ use std::fmt::Debug;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
+use std::time::SystemTime;
 
 #[derive(Debug)]
 pub enum Error {
@@ -64,17 +65,6 @@ pub trait Builder {
 /// the implementation.
 pub trait Runtime {
     type InstanceSpecifier;
-
-    // TODO: HOW?!?
-    /*
-    type Instance<I>: Instance<I>
-    where
-        I: Interface;
-
-    fn make_instance<I: Interface>(
-        &self,
-        instance_specifier: Self::InstanceSpecifier,
-    ) -> Self::Instance<I>;*/
 }
 
 pub trait RuntimeBuilder: Builder
@@ -155,17 +145,22 @@ where
     /// # Safety
     ///
     /// The caller has to make sure to initialize the data in the buffer before calling this method.
-    unsafe fn assume_init(self) -> Self::SampleMut;
+    unsafe fn assume_init_2(self) -> Self::SampleMut;
 }
-
-pub struct InstanceSpecifier {}
 
 pub trait Interface {}
 
 pub trait ProducerBuilder<R: Runtime>: Builder {}
 pub trait ConsumerBuilder<R: Runtime>: Builder {}
 
+pub trait InstanceBuilder<I: Interface>:
+    Builder<Output: Instance<Self::Runtime, Interface = I>>
+{
+    type Runtime: Runtime;
+}
+
 pub trait Instance<R: Runtime> {
+    type Interface: Interface;
     type ProducerBuilder: ProducerBuilder<R>;
     type ConsumerBuilder: ConsumerBuilder<R>;
 
@@ -173,76 +168,14 @@ pub trait Instance<R: Runtime> {
     fn consumer(&self) -> Self::ConsumerBuilder;
 }
 
-/// Generic
-mod sample_impl;
-mod sample_interface;
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::sample_impl::*;
-    use std::time::{Duration, SystemTime};
-
-    #[test]
-    fn create_producer() {
-        let runtime_builder = sample_impl::RuntimeBuilderImpl::new();
-        let runtime = runtime_builder.build().unwrap();
-        let builder =
-            runtime.make_instance::<sample_interface::AutoInterface>(InstanceSpecifier {});
-        //.key_str("key", "value");
-        let _producer = builder.producer().build().unwrap();
-        let _consumer = builder.consumer().build().unwrap();
-    }
-
-    #[test]
-    fn receive_stuff() {
-        let test_subscriber = crate::sample_impl::SubscriberImpl::<u32>::new();
-        for _ in 0..10 {
-            match test_subscriber.receive_until(SystemTime::now() + Duration::from_secs(5)) {
-                Ok(sample) => println!("{}", *sample),
-                Err(Error::Timeout) => panic!("No sample received"),
-                Err(e) => panic!("{:?}", e),
-            }
-        }
-    }
-
-    #[test]
-    fn receive_async_stuff() {
-        let test_subscriber = crate::sample_impl::SubscriberImpl::<u32>::new();
-        // block on an asynchronous reception of data from test_subscriber
-        futures::executor::block_on(async {
-            match test_subscriber.receive().await {
-                Ok(sample) => println!("{}", *sample),
-                Err(e) => panic!("{:?}", e),
-            }
-        })
-    }
-
-    #[test]
-    fn send_stuff() {
-        let test_publisher = Publisher::new();
-        for _ in 0..5 {
-            let sample = test_publisher.allocate();
-            match sample {
-                Ok(mut sample) => {
-                    let init_sample = unsafe {
-                        *sample.as_mut_ptr() = 42u32;
-                        sample.assume_init()
-                    };
-                    assert!(init_sample.send().is_ok());
-                }
-                Err(e) => eprintln!("Oh my! {:?}", e),
-            }
-        }
-    }
-
-    fn is_sync<T: Sync>(_val: T) {}
-
-    #[test]
-    fn builder_is_sync() {
-        is_sync(crate::sample_impl::RuntimeBuilderImpl::new());
-    }
-
-    #[test]
-    fn build_production_runtime() {}
+pub trait Subscriber<T: Reloc + Send> {
+    fn receive_blocking(&self) -> Result<impl Sample<T>>;
+    fn try_receive(&self) -> Result<Option<impl Sample<T>>>;
+    fn receive_until(&self, until: SystemTime) -> Result<impl Sample<T>>;
+    /*fn next<'a>(&'a self) -> impl Future<Output = Result<Sample<'a, T>>>
+    where
+        T: 'a;*/
+    fn receive<'a>(&'a self) -> impl Future<Output = Result<impl Sample<T> + 'a>> + Send
+    where
+        T: 'a;
 }

@@ -1,15 +1,10 @@
 [package]
-name = "com-api-example"
+name = "com-api-sample-instance"
 version = "0.1.0"
 edition = "2024"
 publish = ["common"]
-license = "Apache-2.0"
 
 [dependencies]
-
-[dev-dependencies]
-com-api = { path = "../com-api" }
 com-api-sample-runtime = { path = "../com-api-sample-runtime" }
 com-api-sample-interface = { path = "../com-api-sample-interface" }
-com-api-sample-instance = { path = "../com-api-sample-instance" }
-futures = "0.3"
+com-api = { path = "../com-api" }
