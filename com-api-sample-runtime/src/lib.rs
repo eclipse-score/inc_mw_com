@@ -217,15 +217,27 @@ impl<T> Subscriber<T> for SubscriberImpl<T>
 where
     T: Reloc + Send + Sync,
 {
-    fn receive_blocking(&self) -> com_api::Result<impl com_api::Sample<T>> {
+    fn receive_blocking<'a>(&'a self) -> com_api::Result<impl com_api::Sample<T>>
+    where
+        T: 'a,
+    {
         Err::<Sample<T>, _>(com_api::Error::Fail)
     }
 
-    fn try_receive(&self) -> com_api::Result<Option<impl com_api::Sample<T>>> {
+    fn try_receive<'a>(&'a self) -> com_api::Result<Option<impl com_api::Sample<T> + 'a>>
+    where
+        T: 'a,
+    {
         Ok(None::<Sample<T>>)
     }
 
-    fn receive_until(&self, _until: SystemTime) -> com_api::Result<impl com_api::Sample<T>> {
+    fn receive_until<'a>(
+        &'a self,
+        _until: SystemTime,
+    ) -> com_api::Result<impl com_api::Sample<T> + 'a>
+    where
+        T: 'a,
+    {
         Err::<Sample<T>, _>(com_api::Error::Timeout)
     }
 

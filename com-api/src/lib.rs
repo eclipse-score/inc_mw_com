@@ -169,12 +169,15 @@ pub trait Instance<R: Runtime> {
 }
 
 pub trait Subscriber<T: Reloc + Send> {
-    fn receive_blocking(&self) -> Result<impl Sample<T>>;
-    fn try_receive(&self) -> Result<Option<impl Sample<T>>>;
-    fn receive_until(&self, until: SystemTime) -> Result<impl Sample<T>>;
-    /*fn next<'a>(&'a self) -> impl Future<Output = Result<Sample<'a, T>>>
+    fn receive_blocking<'a>(&'a self) -> Result<impl Sample<T> + 'a>
     where
-        T: 'a;*/
+        T: 'a;
+    fn try_receive<'a>(&'a self) -> Result<Option<impl Sample<T> + 'a>>
+    where
+        T: 'a;
+    fn receive_until<'a>(&'a self, until: SystemTime) -> Result<impl Sample<T> + 'a>
+    where
+        T: 'a;
     fn receive<'a>(&'a self) -> impl Future<Output = Result<impl Sample<T> + 'a>> + Send
     where
         T: 'a;
