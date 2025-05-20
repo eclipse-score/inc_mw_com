@@ -44,10 +44,13 @@ use std::fmt::Debug;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
+use std::time::SystemTime;
 
 #[derive(Debug)]
 pub enum Error {
+    /// TODO: To be replaced, dummy value for "something went wrong"
     Fail,
+    Timeout,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -55,12 +58,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub trait Builder {
     type Output;
     /// Open point: Should this be &mut self so that this can be turned into a trait object?
-    fn build(self) -> Self::Output;
+    fn build(self) -> Result<Self::Output>;
 }
 
 /// This represents the com implementation and acts as a root for all types and objects provided by
 /// the implementation.
-pub trait Runtime {}
+pub trait Runtime {
+    type InstanceSpecifier;
+}
 
 pub trait RuntimeBuilder: Builder
 where
@@ -140,59 +145,40 @@ where
     /// # Safety
     ///
     /// The caller has to make sure to initialize the data in the buffer before calling this method.
-    unsafe fn assume_init(self) -> Self::SampleMut;
+    unsafe fn assume_init_2(self) -> Self::SampleMut;
 }
 
-mod sample_impl;
+pub trait Interface {}
 
-#[cfg(test)]
-mod test {
-    use super::{Builder, SampleMaybeUninit, SampleMut};
-    use std::time::Duration;
+pub trait ProducerBuilder<R: Runtime>: Builder {}
+pub trait ConsumerBuilder<R: Runtime>: Builder {}
 
-    #[test]
-    fn receive_stuff() {
-        let test_subscriber = crate::sample_impl::Subscriber::<u32>::new();
-        for _ in 0..10 {
-            match test_subscriber.wait(Some(Duration::from_secs(5))) {
-                crate::sample_impl::WaitResult::SamplesAvailable => match test_subscriber.next() {
-                    Ok(Some(sample)) => println!("{}", *sample),
-                    Ok(None) => println!("Nothing"),
-                    Err(e) => eprintln!("{:?}", e),
-                },
-                crate::sample_impl::WaitResult::Expired => println!("No sample received"),
-            }
-        }
-    }
+pub trait InstanceBuilder<I: Interface>:
+    Builder<Output: Instance<Self::Runtime, Interface = I>>
+{
+    type Runtime: Runtime;
+}
 
-    #[test]
-    fn send_stuff() {
-        let test_publisher = crate::sample_impl::Publisher::new();
-        for _ in 0..5 {
-            let sample = test_publisher.allocate();
-            match sample {
-                Ok(mut sample) => {
-                    let init_sample = unsafe {
-                        *sample.as_mut_ptr() = 42u32;
-                        sample.assume_init()
-                    };
-                    assert!(init_sample.send().is_ok());
-                }
-                Err(e) => eprintln!("Oh my! {:?}", e),
-            }
-        }
-    }
+pub trait Instance<R: Runtime> {
+    type Interface: Interface;
+    type ProducerBuilder: ProducerBuilder<R>;
+    type ConsumerBuilder: ConsumerBuilder<R>;
 
-    fn is_sync<T: Sync>(_val: T) {}
+    fn producer(&self) -> Self::ProducerBuilder;
+    fn consumer(&self) -> Self::ConsumerBuilder;
+}
 
-    #[test]
-    fn builder_is_sync() {
-        is_sync(crate::sample_impl::RuntimeBuilderImpl::new());
-    }
-
-    #[test]
-    fn build_production_runtime() {
-        let runtime_builder = crate::sample_impl::RuntimeBuilderImpl::new();
-        let _runtime = runtime_builder.build();
-    }
+pub trait Subscriber<T: Reloc + Send> {
+    fn receive_blocking<'a>(&'a self) -> Result<impl Sample<T> + 'a>
+    where
+        T: 'a;
+    fn try_receive<'a>(&'a self) -> Result<Option<impl Sample<T> + 'a>>
+    where
+        T: 'a;
+    fn receive_until<'a>(&'a self, until: SystemTime) -> Result<impl Sample<T> + 'a>
+    where
+        T: 'a;
+    fn receive<'a>(&'a self) -> impl Future<Output = Result<impl Sample<T> + 'a>> + Send
+    where
+        T: 'a;
 }

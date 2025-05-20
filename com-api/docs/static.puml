@@ -17,7 +17,9 @@ interface Builder {
 }
 
 ' Also called "Node"
-interface Runtime
+interface Runtime {
+    type InstanceBuilder<I>
+}
 
 Interface RuntimeBuilder {
     load_config(&mut self, config: &Path): &mut Self
@@ -50,5 +52,9 @@ interface SampleMaybeUninit<T> {
 
 SampleMaybeUninit ..> SampleMut : builds
 Sample <.. SampleMut : builds
+
+class sample::RuntimeImpl
+
+Runtime <- RuntimeImpl
 
 @enduml

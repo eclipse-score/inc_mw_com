@@ -1,0 +1,8 @@
+[package]
+name = "com-api-sample-runtime"
+version = "0.1.0"
+edition = "2024"
+publish = ["common"]
+
+[dependencies]
+com-api = { path = "../com-api" }

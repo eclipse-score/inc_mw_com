@@ -1,0 +1,52 @@
+@startuml
+'https://plantuml.com/component-diagram
+package "com-api" {
+    [Com API]
+}
+
+package "com-api-sample-runtime" {
+    [Com API] <-- [RuntimeImpl]
+}
+
+package "com-api" {
+    [Com API]
+}
+
+package "com-api-sample-interface" #Yellow {
+    [AutoInterface]
+}
+
+package "com-api-sample-instance" #Yellow {
+    [AutoInstance]
+    [AutoInstance] --> [RuntimeImpl]
+    [AutoInstance] --> [AutoInterface]
+    [InstanceBuilder]
+    [InstanceBuilder] --> [AutoInstance]
+
+    note right of [AutoInstance]
+        Code that implements AutoInterface
+        in terms of RuntimeImpl.
+    end note
+}
+
+note top of "com-api-sample-instance"
+        This crate knows all supported interfaces
+        and provides instances for them that are
+        implemented in terms of
+        com-api-sample-runtime::RuntimeImpl
+end note
+
+package "com-api-sample" {
+    [Factory]
+    [Business Logic] --> [AutoInterface]
+    [Factory] --> [InstanceBuilder]
+    [Factory] --> [Com API]
+    [Factory] ..> [Business Logic] : builds
+}
+
+package "Package" #Yellow
+note bottom of "Package"
+    Yellow = generated
+end note
+
+@enduml
