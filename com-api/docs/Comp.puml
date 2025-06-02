@@ -20,8 +20,8 @@ package "com-api-sample-instance" #Yellow {
     [AutoInstance]
     [AutoInstance] --> [RuntimeImpl]
     [AutoInstance] --> [AutoInterface]
-    [InstanceBuilder]
-    [InstanceBuilder] --> [AutoInstance]
+    [RuntimeBuilderImpl]
+    [RuntimeBuilderImpl] --> [AutoInstance]
 
     note right of [AutoInstance]
         Code that implements AutoInterface
@@ -39,7 +39,7 @@ end note
 package "com-api-sample" {
     [Factory]
     [Business Logic] --> [AutoInterface]
-    [Factory] --> [InstanceBuilder]
+    [Factory] --> [RuntimeBuilderImpl]
     [Factory] --> [Com API]
     [Factory] ..> [Business Logic] : builds
 }

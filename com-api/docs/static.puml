@@ -26,22 +26,22 @@ Interface RuntimeBuilder {
     build(self): Self::Runtime
 }
 
-Builder <|-- RuntimeBuilder : Builder::Output: Runtime
+Builder <-- RuntimeBuilder : Builder::Output: Runtime
 RuntimeBuilder ..> Runtime : builds
 
 interface Deref
 interface DerefMut
-Deref <|-- DerefMut
+Deref <-- DerefMut
 
 interface Sample<T>
-Deref <|-- Sample : Deref::Target=T
+Deref <-- Sample : Deref::Target=T
 
 interface SampleMut<T> {
     type Sample: Sample<T>
     into_sample(self) : Sample
     send(self) : Result
 }
-DerefMut <|-- SampleMut : Deref::Target=T
+DerefMut <-- SampleMut : Deref::Target=T
 
 interface SampleMaybeUninit<T> {
     type SampleMut: SampleMut<T>
@@ -53,8 +53,59 @@ interface SampleMaybeUninit<T> {
 SampleMaybeUninit ..> SampleMut : builds
 Sample <.. SampleMut : builds
 
-class sample::RuntimeImpl
+class sample_runtime::RuntimeImpl
 
 Runtime <- RuntimeImpl
+
+interface ProducerBuilder {
+  type Interface: Interface
+}
+interface Producer {
+  type Interface: Interface
+}
+interface OfferedProducer {
+  type Interface: Interface
+}
+
+ProducerBuilder ..> Producer : builds
+Producer ..> OfferedProducer : offer()
+Producer <.. OfferedProducer : unoffer()
+
+interface ServiceDiscovery {
+  type Enumerator: IntoIterator<ConsumerDescriptor>
+}
+
+interface ConsumerDescriptor {
+  type Interface: Interface
+}
+interface ConsumerBuilder {
+  type Interface: Interface
+}
+interface Consumer {
+  type Interface: Interface
+}
+
+ServiceDiscovery ..> ServiceDiscovery::Enumerator : creates
+ServiceDiscovery::Enumerator o-- ConsumerDescriptor
+ConsumerDescriptor ..> ConsumerBuilder : creates
+ConsumerBuilder ..> Consumer : builds
+
+interface Subscriber<T>
+interface Subscription<T>
+interface SampleContainer<S>
+
+Sample "n" --o "1" SampleContainer
+
+Subscriber ..> Subscription : subscribe()
+Subscriber <.. Subscription : unsubscribe()
+
+SampleContainer <.. Subscription : populates sample data <
+
+Consumer "1" *- "n" Subscriber
+
+interface Publisher<T>
+
+Producer "1" *- "n" Publisher
+Subscription <..> Publisher : event data exchange
 
 @enduml

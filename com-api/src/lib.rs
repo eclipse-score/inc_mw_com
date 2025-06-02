@@ -11,9 +11,9 @@
 
 //! # API Design principles
 //!
-//! - We stick to the builder pattern down to a single service
+//! - We stick to the builder pattern down to a single service (TODO: Should this be introduced to the C++ API?)
 //! - We make all elements mockable. This means we provide traits for the building blocks.
-//!   We strive for enabling trait objects for mockable entities.
+//!   We strive for enabling trait objects for mockable entities. (TODO: Inspect all consuming methods for adherence to this rule)
 //! - We allow for the allocation of heap memory during initialization phase (offer, connect, ...)
 //!   but prevent heap memory usage during the running phase. Any heap memory allocations during the
 //!   run phase must happen on preallocated memory chunks.
@@ -40,11 +40,10 @@
 //! - Structures
 //! - Tuples
 
+use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
-use std::time::SystemTime;
 
 #[derive(Debug)]
 pub enum Error {
@@ -55,16 +54,17 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Generic trait for all "factory-like" types
 pub trait Builder {
     type Output;
-    /// Open point: Should this be &mut self so that this can be turned into a trait object?
+    /// TODO: Should this be &mut self so that this can be turned into a trait object?
     fn build(self) -> Result<Self::Output>;
 }
 
 /// This represents the com implementation and acts as a root for all types and objects provided by
 /// the implementation.
 pub trait Runtime {
-    type InstanceSpecifier;
+    type Sample<'a, T: Reloc + Send + 'a>: Sample<T>;
 }
 
 pub trait RuntimeBuilder: Builder
@@ -73,6 +73,8 @@ where
 {
     fn load_config(&mut self, config: &Path) -> &mut Self;
 }
+
+pub struct InstanceSpecifier {}
 
 /// This trait shall ensure that we can safely use an instance of the implementing type across
 /// address boundaries. This property may be violated by the following circumstances:
@@ -97,7 +99,10 @@ unsafe impl Reloc for u32 {}
 ///
 /// By implementing the `Deref` trait implementations of the trait support the `.` operator for dereferencing.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait Sample<T>: Deref<Target = T> + Send
+///
+/// The ordering of SamplePtrs is total over the reception order
+// TODO: C++ doesn't yet support this. Expose API to compare SamplePtr ages.
+pub trait Sample<T>: Deref<Target = T> + Send + PartialOrd + Ord
 where
     T: Send + Reloc,
 {
@@ -126,7 +131,10 @@ where
 /// Utilizing `DerefMut` on the buffer reveals a reference to the internal `MaybeUninit<T>`.
 /// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns a `SampleMut`.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait SampleMaybeUninit<T>: DerefMut<Target = MaybeUninit<T>>
+///
+/// TODO: Shall we also require DerefMut<Target=MaybeUninit<T>> from implementing types? How to deal
+/// TODO: with the ambiguous assume_init() then?
+pub trait SampleMaybeUninit<T>
 where
     T: Send + Reloc,
 {
@@ -142,43 +150,149 @@ where
     ///
     /// This corresponds to `MaybeUninit::assume_init`.
     ///
+    /// TODO: Collision with MaybeUninit::assume_init() needs to be resolved.
+    ///
     /// # Safety
     ///
     /// The caller has to make sure to initialize the data in the buffer before calling this method.
-    unsafe fn assume_init_2(self) -> Self::SampleMut;
+    unsafe fn assume_init(self) -> Self::SampleMut;
 }
 
 pub trait Interface {}
 
-pub trait ProducerBuilder<R: Runtime>: Builder {}
-pub trait ConsumerBuilder<R: Runtime>: Builder {}
+pub trait OfferedProducer {
+    type Interface: Interface;
+    type Producer: Producer<Interface = Self::Interface>;
 
-pub trait InstanceBuilder<I: Interface>:
-    Builder<Output: Instance<Self::Runtime, Interface = I>>
-{
-    type Runtime: Runtime;
+    fn unoffer(self) -> Self::Producer;
 }
 
-pub trait Instance<R: Runtime> {
+pub trait Producer {
     type Interface: Interface;
-    type ProducerBuilder: ProducerBuilder<R>;
-    type ConsumerBuilder: ConsumerBuilder<R>;
+    type OfferedProducer: OfferedProducer<Interface = Self::Interface>;
 
-    fn producer(&self) -> Self::ProducerBuilder;
-    fn consumer(&self) -> Self::ConsumerBuilder;
+    fn offer(self) -> Result<Self::OfferedProducer>;
+}
+
+pub trait Consumer {}
+
+pub trait ProducerBuilder<I: Interface, R: Runtime>:
+    Builder<Output: Producer<Interface = I>>
+{
+}
+
+pub trait ServiceDiscovery<I: Interface, R: Runtime> {
+    type ConsumerDescriptor: ConsumerDescriptor<I, R>;
+    type ServiceEnumerator: IntoIterator<Item = Self::ConsumerDescriptor>;
+
+    fn get_available_instances(&self) -> Result<Self::ServiceEnumerator>;
+    // TODO: Provide an async stream for newly available services / ServiceDescriptors
+}
+
+pub trait ConsumerBuilder<I: Interface, R: Runtime>: Builder<Output: Consumer> {}
+
+pub trait ConsumerDescriptor<I: Interface, R: Runtime>: Clone {
+    type ConsumerBuilder: ConsumerBuilder<I, R>;
+
+    /// Example property of available services, more to come?
+    fn get_instance_id(&self) -> usize; // TODO: Turn return type into separate type
+    fn into_builder(self) -> Self::ConsumerBuilder;
 }
 
 pub trait Subscriber<T: Reloc + Send> {
-    fn receive_blocking<'a>(&'a self) -> Result<impl Sample<T> + 'a>
+    type Subscription: Subscription<T>;
+
+    fn subscribe(self, max_num_samples: usize) -> Result<Self::Subscription>;
+}
+
+pub trait SampleContainer<S>: IntoIterator<Item = S> {
+    fn iter<'a, T>(&'a self) -> impl Iterator<Item = &'a T>
+    where
+        S: Sample<T>,
+        T: Reloc + Send + 'a;
+
+    /// Will remove the first element from the container (if any) and return it to the user.
+    fn pop_front(&mut self) -> Option<S>;
+
+    /// Will add a sample to the end of the container.
+    fn push_back(&mut self, new: S) -> Result<()>;
+}
+
+impl<S> SampleContainer<S> for VecDeque<S> {
+    fn iter<'a, T>(&'a self) -> impl Iterator<Item = &'a T>
+    where
+        S: Sample<T>,
+        T: Reloc + Send + 'a,
+    {
+        self.iter().map(<S as Deref>::deref)
+    }
+
+    fn pop_front(&mut self) -> Option<S> {
+        self.pop_front()
+    }
+
+    fn push_back(&mut self, new: S) -> Result<()> {
+        self.push_back(new);
+        Ok(())
+    }
+}
+
+pub trait Subscription<T: Reloc + Send> {
+    type Subscriber: Subscriber<T>;
+    type Sample<'a>
     where
         T: 'a;
-    fn try_receive<'a>(&'a self) -> Result<Option<impl Sample<T> + 'a>>
+
+    fn unsubscribe(self) -> Self::Subscriber;
+
+    /// Returns up to max_samples samples.
+    ///
+    /// This call polls for up to max_new samples from the IPC input buffers without blocking the
+    /// calling thread.
+    ///
+    /// The method expects a (possibly empty) buffer that may contain samples from a previous call
+    /// to `try_receive` of the same `Subscription` instance. If there are samples from other
+    /// instances, the method fails. These sample pointers can then be reused by the method:
+    ///
+    /// TODO: How to make sure that the provided container contains samples from the same
+    /// TODO: `Subscription` instance?
+    ///
+    /// - If there are less than max_samples in the communication buffer, the method will reuse
+    ///   samples contained in the provided sample container, beginning from the last, going
+    ///   backwards.
+    /// - If the input container is empty on call, it will exclusively be filled with new samples.
+    /// - If the input container contains more samples than max_samples before the call,
+    ///   it will contain max_samples samples, potentially removing samples from
+    ///   the container, even if no new samples were added.
+    ///
+    /// Returns the updated buffer and the number of newly added samples. All new samples are added
+    /// to the back of the buffer, with the last sample being the newest. If less than max_samples
+    /// could be added to the buffer, the samples that had been inside the buffer are retained, with
+    /// the first samples getting removed as new samples are added to the back of the buffer.
+    ///
+    /// TODO: C++ cannot fully support this yet since there is no way to retain potentially-reusable
+    /// TODO: samples.
+    fn try_receive<'a, C>(&self, scratch: C, max_samples: usize) -> (C, Result<usize>)
     where
-        T: 'a;
-    fn receive_until<'a>(&'a self, until: SystemTime) -> Result<impl Sample<T> + 'a>
+        Self: 'a,
+        T: 'a,
+        C: SampleContainer<Self::Sample<'a>> + 'a;
+
+    /// This method returns a future that resolves as soon as at least `new_samples` samples have
+    /// been transferred from the communication buffer to the sample container.
+    ///
+    /// The replacement semantics as well as the post conditions of the resolved future are equal
+    /// to `try_receive`.
+    ///
+    /// TODO: See above for C++ limitations.
+    fn receive<'a, C>(
+        &self,
+        scratch: C,
+        new_samples: usize,
+        max_samples: usize,
+    ) -> impl Future<Output = (C, Result<usize>)> + Send
     where
-        T: 'a;
-    fn receive<'a>(&'a self) -> impl Future<Output = Result<impl Sample<T> + 'a>> + Send
-    where
-        T: 'a;
+        Self: 'a,
+        T: 'a,
+        C: SampleContainer<Self::Sample<'a>> + 'a;
 }

@@ -11,46 +11,23 @@
 
 #![allow(dead_code)]
 
+use std::cmp::Ordering;
+use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
-use std::time::SystemTime;
+use std::sync::atomic::AtomicUsize;
 
-use com_api::{Builder, Reloc, Runtime, Subscriber};
-
-pub struct InstanceSpecifier {}
+use com_api::{Builder, Reloc, Runtime, SampleContainer, Subscriber, Subscription};
 
 pub struct RuntimeImpl {}
+
 impl Runtime for RuntimeImpl {
-    type InstanceSpecifier = InstanceSpecifier;
+    type Sample<'a, T: Reloc + Send + 'a> = Sample<'a, T>;
 }
 
 impl RuntimeImpl {}
-
-pub struct RuntimeBuilderImpl {}
-
-/// Generic trait for all "factory-like" types
-impl Builder for RuntimeBuilderImpl {
-    type Output = RuntimeImpl;
-    fn build(self) -> com_api::Result<Self::Output> {
-        Ok(Self::Output {})
-    }
-}
-
-/// Entry point for the default implementation for the com module of s-core
-impl com_api::RuntimeBuilder for RuntimeBuilderImpl {
-    fn load_config(&mut self, _config: &Path) -> &mut Self {
-        self
-    }
-}
-
-impl RuntimeBuilderImpl {
-    /// Creates a new instance of the default implementation of the com layer
-    pub fn new() -> Self {
-        Self {}
-    }
-}
 
 struct LolaEvent<T> {
     event: PhantomData<T>,
@@ -78,8 +55,11 @@ pub struct Sample<'a, T>
 where
     T: Reloc + Send,
 {
+    id: usize,
     inner: SampleBinding<'a, T>,
 }
+
+static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 impl<'a, T> From<T> for Sample<'a, T>
 where
@@ -87,6 +67,7 @@ where
 {
     fn from(value: T) -> Self {
         Self {
+            id: ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             inner: SampleBinding::Test(Box::new(value)),
         }
     }
@@ -107,6 +88,35 @@ where
 }
 
 impl<'a, T> com_api::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
+
+impl<'a, T> PartialEq for Sample<'a, T>
+where
+    T: Send + Reloc,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl<'a, T> Eq for Sample<'a, T> where T: Send + Reloc {}
+
+impl<'a, T> PartialOrd for Sample<'a, T>
+where
+    T: Send + Reloc,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+
+impl<'a, T> Ord for Sample<'a, T>
+where
+    T: Send + Reloc,
+{
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
 
 pub struct SampleMut<'a, T>
 where
@@ -153,30 +163,10 @@ where
 
 pub struct SampleMaybeUninit<'a, T>
 where
-    T: com_api::Reloc + Send,
+    T: Reloc + Send,
 {
     data: MaybeUninit<T>,
     _lifetime: PhantomData<&'a T>,
-}
-
-impl<T> Deref for SampleMaybeUninit<'_, T>
-where
-    T: Reloc + Send,
-{
-    type Target = MaybeUninit<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-impl<T> DerefMut for SampleMaybeUninit<'_, T>
-where
-    T: Reloc + Send,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.data
-    }
 }
 
 impl<'a, T> com_api::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
@@ -192,7 +182,7 @@ where
         }
     }
 
-    unsafe fn assume_init_2(self) -> SampleMut<'a, T> {
+    unsafe fn assume_init(self) -> SampleMut<'a, T> {
         SampleMut {
             data: unsafe { self.data.assume_init() },
             _lifetime: PhantomData,
@@ -200,8 +190,30 @@ where
     }
 }
 
-pub struct SubscriberImpl<T> {
+pub struct SubscribableImpl<T> {
     _data: PhantomData<T>,
+}
+
+impl<T> Default for SubscribableImpl<T> {
+    fn default() -> Self {
+        Self { _data: PhantomData }
+    }
+}
+
+impl<T: Reloc + Send> Subscriber<T> for SubscribableImpl<T> {
+    type Subscription = SubscriberImpl<T>;
+
+    fn subscribe(self, max_num_samples: usize) -> com_api::Result<Self::Subscription> {
+        Ok(SubscriberImpl::new())
+    }
+}
+
+#[derive(Default)]
+pub struct SubscriberImpl<T>
+where
+    T: Reloc + Send,
+{
+    data: VecDeque<T>,
 }
 
 impl<T> SubscriberImpl<T>
@@ -209,43 +221,51 @@ where
     T: Reloc + Send,
 {
     pub fn new() -> Self {
-        Self { _data: PhantomData }
+        Self {
+            data: Default::default(),
+        }
+    }
+
+    pub fn add_data(&mut self, data: T) {
+        self.data.push_front(data);
     }
 }
 
-impl<T> Subscriber<T> for SubscriberImpl<T>
+impl<T> Subscription<T> for SubscriberImpl<T>
 where
-    T: Reloc + Send + Sync,
+    T: Reloc + Send,
 {
-    fn receive_blocking<'a>(&'a self) -> com_api::Result<impl com_api::Sample<T>>
+    type Subscriber = SubscribableImpl<T>;
+    type Sample<'a>
+        = Sample<'a, T>
     where
-        T: 'a,
-    {
-        Err::<Sample<T>, _>(com_api::Error::Fail)
+        T: 'a;
+
+    fn unsubscribe(self) -> Self::Subscriber {
+        Default::default()
     }
 
-    fn try_receive<'a>(&'a self) -> com_api::Result<Option<impl com_api::Sample<T> + 'a>>
+    fn try_receive<'a, C>(&self, scratch: C, max_samples: usize) -> (C, com_api::Result<usize>)
     where
+        Self: 'a,
         T: 'a,
+        C: SampleContainer<Self::Sample<'a>> + 'a,
     {
-        Ok(None::<Sample<T>>)
+        todo!()
     }
 
-    fn receive_until<'a>(
-        &'a self,
-        _until: SystemTime,
-    ) -> com_api::Result<impl com_api::Sample<T> + 'a>
+    fn receive<'a, C>(
+        &self,
+        scratch: C,
+        new_samples: usize,
+        max_samples: usize,
+    ) -> impl Future<Output = (C, com_api::Result<usize>)> + Send
     where
+        Self: 'a,
         T: 'a,
+        C: SampleContainer<Self::Sample<'a>> + 'a,
     {
-        Err::<Sample<T>, _>(com_api::Error::Timeout)
-    }
-
-    async fn receive<'a>(&'a self) -> com_api::Result<impl com_api::Sample<T> + 'a>
-    where
-        T: 'a,
-    {
-        Err::<Sample<T>, com_api::Error>(com_api::Error::Fail)
+        async { todo!() }
     }
 }
 
@@ -265,6 +285,43 @@ where
         Ok(SampleMaybeUninit {
             data: MaybeUninit::uninit(),
             _lifetime: PhantomData,
+        })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use com_api::Subscription;
+    use std::collections::VecDeque;
+
+    #[test]
+    fn receive_stuff() {
+        let test_subscriber = super::SubscriberImpl::<u32>::new();
+        for _ in 0..10 {
+            let sample_buf = VecDeque::new();
+            match test_subscriber.try_receive(sample_buf, 1) {
+                (_, Ok(0)) => panic!("No sample received"),
+                (sample_buf, Ok(x)) => {
+                    println!("{} samples received: sample[0] = {}", x, *sample_buf[0])
+                }
+                (_, Err(e)) => panic!("{:?}", e),
+            }
+        }
+    }
+
+    #[test]
+    fn receive_async_stuff() {
+        let test_subscriber = super::SubscriberImpl::<u32>::new();
+        // block on an asynchronous reception of data from test_subscriber
+        futures::executor::block_on(async {
+            let sample_buf = VecDeque::new();
+            match test_subscriber.receive(sample_buf, 1, 1).await {
+                (_, Ok(0)) => panic!("No sample received"),
+                (sample_buf, Ok(x)) => {
+                    println!("{} samples received: sample[0] = {}", x, *sample_buf[0])
+                }
+                (_, Err(e)) => panic!("{:?}", e),
+            }
         })
     }
 }

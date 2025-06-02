@@ -6,3 +6,6 @@ publish = ["common"]
 
 [dependencies]
 com-api = { path = "../com-api" }
+
+[dev-dependencies]
+futures = "0.3"

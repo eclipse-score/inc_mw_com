@@ -15,84 +15,65 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use com_api::{Builder, Instance, SampleMaybeUninit, SampleMut, Subscriber};
-    use com_api_sample_interface::AutoInterface;
-    use com_api_sample_runtime::InstanceSpecifier;
-    use std::time::{Duration, SystemTime};
+    use com_api::{
+        Builder, ConsumerDescriptor, InstanceSpecifier, Producer, SampleMaybeUninit, SampleMut,
+        ServiceDiscovery, Subscriber, Subscription,
+    };
+    use com_api_sample_interface::{Tire, VehicleInterface};
+    use std::collections::VecDeque;
 
     #[test]
     fn create_producer() {
         // Factory
-        let runtime_builder = com_api_sample_runtime::RuntimeBuilderImpl::new();
+        let runtime_builder = com_api_sample_instance::RuntimeBuilderImpl::new();
         let runtime = runtime_builder.build().unwrap();
-        let instance_builder = com_api_sample_instance::InstanceBuilder::<AutoInterface>::new(
-            &runtime,
-            InstanceSpecifier {},
-        );
-        //.key_str("key", "value");
-        let _producer = instance_builder.producer().build().unwrap();
-        let consumer = instance_builder.consumer().build().unwrap();
+        let producer_builder = com_api_sample_instance::RuntimeBuilderImpl::create_provided_service::<
+            VehicleInterface,
+        >(&runtime, InstanceSpecifier {});
+        let producer = producer_builder.build().unwrap();
+        let offered_producer = producer.offer().unwrap();
 
         // Business logic
-        match consumer
-            .linkes_rad
-            .receive_until(SystemTime::now() + Duration::from_secs(5))
-        {
-            Ok(sample) => println!("{:?}", *sample),
-            Err(com_api::Error::Timeout) => panic!("No sample received"),
-            Err(e) => panic!("{:?}", e),
-        }
+        let uninit_sample = offered_producer.left_tire.allocate().unwrap();
+        let sample = uninit_sample.write(Tire {});
+        sample.send().unwrap();
     }
 
     #[test]
-    fn receive_stuff() {
-        let test_subscriber = com_api_sample_runtime::SubscriberImpl::<u32>::new();
+    fn create_consumer() {
+        // Create runtime
+        let runtime_builder = com_api_sample_instance::RuntimeBuilderImpl::new();
+        let runtime = runtime_builder.build().unwrap();
+
+        // Create service discovery
+        let consumer_discovery = com_api_sample_instance::RuntimeBuilderImpl::find_service::<
+            VehicleInterface,
+        >(&runtime, InstanceSpecifier {});
+        let available_services = consumer_discovery.get_available_instances().unwrap();
+
+        // Create consumer from first discovered service
+        let descriptor = available_services
+            .into_iter()
+            .find(|desc| desc.get_instance_id() == 42)
+            .unwrap();
+        let consumer_builder = descriptor.into_builder();
+        let consumer = consumer_builder.build().unwrap();
+
+        // Subscribe to one event
+        let subscribed = consumer.left_tire.subscribe(3).unwrap();
+
+        // Create sample buffer to be used during receive
+        let mut sample_buf = Some(VecDeque::new());
         for _ in 0..10 {
-            match test_subscriber.receive_until(SystemTime::now() + Duration::from_secs(5)) {
-                Ok(sample) => println!("{}", *sample),
-                Err(com_api::Error::Timeout) => panic!("No sample received"),
-                Err(e) => panic!("{:?}", e),
-            }
-        }
-    }
-
-    #[test]
-    fn receive_async_stuff() {
-        let test_subscriber = com_api_sample_runtime::SubscriberImpl::<u32>::new();
-        // block on an asynchronous reception of data from test_subscriber
-        futures::executor::block_on(async {
-            match test_subscriber.receive().await {
-                Ok(sample) => println!("{}", *sample),
-                Err(e) => panic!("{:?}", e),
-            }
-        })
-    }
-
-    #[test]
-    fn send_stuff() {
-        let test_publisher = com_api_sample_runtime::Publisher::new();
-        for _ in 0..5 {
-            let sample = test_publisher.allocate();
-            match sample {
-                Ok(mut sample) => {
-                    let init_sample = unsafe {
-                        *sample.as_mut_ptr() = 42u32;
-                        sample.assume_init_2()
-                    };
-                    assert!(init_sample.send().is_ok());
+            match subscribed.try_receive(sample_buf.take().unwrap(), 1) {
+                (_, Ok(0)) => panic!("No sample received"),
+                (mut buf, Ok(x)) => {
+                    let sample = buf.pop_front().unwrap();
+                    sample_buf = Some(buf); // Reuse the buffer
+                    println!("{} samples received: sample[0] = {:?}", x, *sample)
                 }
-                Err(e) => eprintln!("Oh my! {:?}", e),
+                (_, Err(e)) => panic!("{:?}", e),
             }
         }
     }
-
-    fn is_sync<T: Sync>(_val: T) {}
-
-    #[test]
-    fn builder_is_sync() {
-        is_sync(com_api_sample_runtime::RuntimeBuilderImpl::new());
-    }
-
-    #[test]
-    fn build_production_runtime() {}
 }

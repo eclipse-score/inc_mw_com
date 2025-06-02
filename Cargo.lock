@@ -19,7 +19,6 @@ dependencies = [
  "com-api",
  "com-api-sample-instance",
  "com-api-sample-interface",
- "com-api-sample-runtime",
  "futures",
 ]
 
@@ -44,6 +43,7 @@ name = "com-api-sample-runtime"
 version = "0.1.0"
 dependencies = [
  "com-api",
+ "futures",
 ]
 
 [[package]]

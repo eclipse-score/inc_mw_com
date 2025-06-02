@@ -9,7 +9,6 @@ license = "Apache-2.0"
 
 [dev-dependencies]
 com-api = { path = "../com-api" }
-com-api-sample-runtime = { path = "../com-api-sample-runtime" }
 com-api-sample-interface = { path = "../com-api-sample-interface" }
 com-api-sample-instance = { path = "../com-api-sample-instance" }
 futures = "0.3"
