@@ -17,6 +17,9 @@
 //!     exhaust: Event<Exhaust>,
 //!     set_indicator_state: FnMut(indicator_status: IndicatorStatus) -> Result<bool>,
 //! }
+//!
+//! interface Another {}
+//!
 //! ```
 
 use com_api::{Interface, Reloc};
@@ -32,3 +35,7 @@ pub struct VehicleInterface {}
 
 /// Generic
 impl Interface for VehicleInterface {}
+
+pub struct AnotherInterface {}
+
+impl Interface for AnotherInterface {}

@@ -19,7 +19,7 @@ mod test {
         Builder, ConsumerDescriptor, InstanceSpecifier, Producer, SampleMaybeUninit, SampleMut,
         ServiceDiscovery, Subscriber, Subscription,
     };
-    use com_api_sample_interface::{Tire, VehicleInterface};
+    use com_api_sample_interface::{AnotherInterface, Tire, VehicleInterface};
     use std::collections::VecDeque;
 
     #[test]

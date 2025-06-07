@@ -10,8 +10,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use com_api::{
-    Builder, Consumer, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface,
-    ServiceDiscovery,
+    Builder, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, ServiceDiscovery,
 };
 use com_api_sample_runtime::RuntimeImpl;
 
@@ -55,11 +54,8 @@ impl RuntimeBuilderImpl {
     }
 }
 
-pub trait ImplementedBySample: Interface {
-    type Consumer: Consumer;
-}
-
-// Generic starts here
+// Type needs to be defined in the generate crate.
+// Reason: impl ServiceDiscovery references SampleConsumerDescriptor, causing a cyclic dependency
 pub struct SampleConsumerDiscovery<I> {
     _interface: PhantomData<I>,
 }
@@ -72,7 +68,10 @@ impl<I> SampleConsumerDiscovery<I> {
     }
 }
 
-impl<I: ImplementedBySample> ServiceDiscovery<I, RuntimeImpl> for SampleConsumerDiscovery<I> {
+impl<I: Interface> ServiceDiscovery<I, RuntimeImpl> for SampleConsumerDiscovery<I>
+where
+    SampleConsumerDescriptor<I>: ConsumerDescriptor<I, RuntimeImpl>,
+{
     type ConsumerDescriptor = SampleConsumerDescriptor<I>;
     type ServiceEnumerator = Vec<SampleConsumerDescriptor<I>>;
 
@@ -81,6 +80,8 @@ impl<I: ImplementedBySample> ServiceDiscovery<I, RuntimeImpl> for SampleConsumer
     }
 }
 
+// Type needs to be defined in the generate crate.
+// Reason: Violation of orphan rule.
 pub struct SampleProducerBuilder<I: Interface> {
     instance_specifier: InstanceSpecifier,
     _interface: PhantomData<I>,
@@ -95,6 +96,8 @@ impl<I: Interface> SampleProducerBuilder<I> {
     }
 }
 
+// Type needs to be defined in the generate crate.
+// Reason: impl ConsumerDescriptor references SampleConsumerBuilder, causing a cyclic dependency
 pub struct SampleConsumerDescriptor<I: Interface> {
     _interface: PhantomData<I>,
 }
@@ -107,7 +110,10 @@ impl<I: Interface> Clone for SampleConsumerDescriptor<I> {
     }
 }
 
-impl<I: ImplementedBySample> ConsumerDescriptor<I, RuntimeImpl> for SampleConsumerDescriptor<I> {
+impl<I: Interface> ConsumerDescriptor<I, RuntimeImpl> for SampleConsumerDescriptor<I>
+where
+    SampleConsumerBuilder<I>: ConsumerBuilder<I, RuntimeImpl>,
+{
     type ConsumerBuilder = SampleConsumerBuilder<I>;
 
     fn get_instance_id(&self) -> usize {
@@ -119,31 +125,20 @@ impl<I: ImplementedBySample> ConsumerDescriptor<I, RuntimeImpl> for SampleConsum
     }
 }
 
+// Type needs to be defined in the generate crate.
+// Reason: Violation of orphan rule.
 pub struct SampleConsumerBuilder<I: Interface> {
     instance_specifier: InstanceSpecifier,
     _interface: PhantomData<I>,
 }
 
-impl<I: ImplementedBySample> ConsumerBuilder<I, RuntimeImpl> for SampleConsumerBuilder<I> {}
-
-impl<I: ImplementedBySample> Builder for SampleConsumerBuilder<I> {
-    type Output = I::Consumer;
-
-    fn build(self) -> com_api::Result<Self::Output> {
-        todo!()
-    }
-}
-
 mod generated {
-    use crate::{ImplementedBySample, SampleProducerBuilder};
-    use com_api::{Builder, Consumer, OfferedProducer, Producer, ProducerBuilder};
+    use crate::{SampleConsumerBuilder, SampleProducerBuilder};
+    use com_api::{Builder, Consumer, ConsumerBuilder, OfferedProducer, Producer, ProducerBuilder};
     use com_api_sample_interface::VehicleInterface;
     use com_api_sample_runtime::RuntimeImpl;
 
     // Generated starts here
-    impl ImplementedBySample for VehicleInterface {
-        type Consumer = VehicleConsumer;
-    }
 
     pub struct VehicleProducer {}
 
@@ -170,11 +165,6 @@ mod generated {
         }
     }
 
-    pub struct VehicleConsumer {
-        pub left_tire: com_api_sample_runtime::SubscribableImpl<com_api_sample_interface::Tire>,
-        pub exhaust: com_api_sample_runtime::SubscribableImpl<com_api_sample_interface::Exhaust>,
-    }
-
     impl Builder for SampleProducerBuilder<VehicleInterface> {
         type Output = VehicleProducer;
 
@@ -184,6 +174,20 @@ mod generated {
     }
 
     impl ProducerBuilder<VehicleInterface, RuntimeImpl> for SampleProducerBuilder<VehicleInterface> {}
+    pub struct VehicleConsumer {
+        pub left_tire: com_api_sample_runtime::SubscribableImpl<com_api_sample_interface::Tire>,
+        pub exhaust: com_api_sample_runtime::SubscribableImpl<com_api_sample_interface::Exhaust>,
+    }
 
     impl Consumer for VehicleConsumer {}
+
+    impl ConsumerBuilder<VehicleInterface, RuntimeImpl> for SampleConsumerBuilder<VehicleInterface> {}
+
+    impl Builder for SampleConsumerBuilder<VehicleInterface> {
+        type Output = VehicleConsumer;
+
+        fn build(self) -> com_api::Result<Self::Output> {
+            todo!()
+        }
+    }
 }
