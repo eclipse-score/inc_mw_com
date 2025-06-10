@@ -30,7 +30,25 @@ impl Runtime for RuntimeImpl {
     type Sample<'a, T: Reloc + Send + 'a> = Sample<'a, T>;
 }
 
-impl RuntimeImpl {}
+impl RuntimeImpl {
+    // TODO: Any chance that these can be moved to a trait so that this becomes more testable?
+    // If yes, this trait is certainly located here since
+    pub fn find_instance<I: Interface>(
+        &self,
+        instance_specifier: InstanceSpecifier,
+    ) -> SampleConsumerDiscovery<I> {
+        SampleConsumerDiscovery {
+            _interface: PhantomData,
+        }
+    }
+
+    pub fn create_provided_service<I: Interface>(
+        &self,
+        instance_specifier: InstanceSpecifier,
+    ) -> SampleProducerBuilder<I> {
+        SampleProducerBuilder::new(&self, instance_specifier)
+    }
+}
 
 struct LolaEvent<T> {
     event: PhantomData<T>,
@@ -381,20 +399,6 @@ impl RuntimeBuilderImpl {
     /// Creates a new instance of the default implementation of the com layer
     pub fn new() -> Self {
         Self {}
-    }
-
-    pub fn find_service<I: Interface>(
-        runtime: &RuntimeImpl,
-        instance_specifier: InstanceSpecifier,
-    ) -> SampleConsumerDiscovery<I> {
-        SampleConsumerDiscovery::new(runtime, instance_specifier)
-    }
-
-    pub fn create_provided_service<I: Interface>(
-        runtime: &RuntimeImpl,
-        instance_specifier: InstanceSpecifier,
-    ) -> SampleProducerBuilder<I> {
-        SampleProducerBuilder::new(runtime, instance_specifier)
     }
 }
 
