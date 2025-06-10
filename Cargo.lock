@@ -17,25 +17,16 @@ name = "com-api-example"
 version = "0.1.0"
 dependencies = [
  "com-api",
- "com-api-sample-instance",
- "com-api-sample-interface",
- "futures",
-]
-
-[[package]]
-name = "com-api-sample-instance"
-version = "0.1.0"
-dependencies = [
- "com-api",
- "com-api-sample-interface",
+ "com-api-sample-gen",
  "com-api-sample-runtime",
 ]
 
 [[package]]
-name = "com-api-sample-interface"
+name = "com-api-sample-gen"
 version = "0.1.0"
 dependencies = [
  "com-api",
+ "com-api-sample-runtime",
 ]
 
 [[package]]

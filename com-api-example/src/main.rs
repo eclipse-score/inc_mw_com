@@ -19,15 +19,15 @@ mod test {
         Builder, ConsumerDescriptor, InstanceSpecifier, Producer, SampleMaybeUninit, SampleMut,
         ServiceDiscovery, Subscriber, Subscription,
     };
-    use com_api_sample_interface::{AnotherInterface, Tire, VehicleInterface};
+    use com_api_sample_gen::{AnotherInterface, Tire, VehicleInterface};
     use std::collections::VecDeque;
 
     #[test]
     fn create_producer() {
         // Factory
-        let runtime_builder = com_api_sample_instance::RuntimeBuilderImpl::new();
+        let runtime_builder = com_api_sample_runtime::RuntimeBuilderImpl::new();
         let runtime = runtime_builder.build().unwrap();
-        let producer_builder = com_api_sample_instance::RuntimeBuilderImpl::create_provided_service::<
+        let producer_builder = com_api_sample_runtime::RuntimeBuilderImpl::create_provided_service::<
             VehicleInterface,
         >(&runtime, InstanceSpecifier {});
         let producer = producer_builder.build().unwrap();
@@ -42,11 +42,11 @@ mod test {
     #[test]
     fn create_consumer() {
         // Create runtime
-        let runtime_builder = com_api_sample_instance::RuntimeBuilderImpl::new();
+        let runtime_builder = com_api_sample_runtime::RuntimeBuilderImpl::new();
         let runtime = runtime_builder.build().unwrap();
 
         // Create service discovery
-        let consumer_discovery = com_api_sample_instance::RuntimeBuilderImpl::find_service::<
+        let consumer_discovery = com_api_sample_runtime::RuntimeBuilderImpl::find_service::<
             VehicleInterface,
         >(&runtime, InstanceSpecifier {});
         let available_services = consumer_discovery.get_available_instances().unwrap();

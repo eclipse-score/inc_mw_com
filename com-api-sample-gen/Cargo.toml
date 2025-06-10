@@ -1,8 +1,9 @@
 [package]
-name = "com-api-sample-interface"
+name = "com-api-sample-gen"
 version = "0.1.0"
 edition = "2024"
 publish = ["common"]
 
 [dependencies]
+com-api-sample-runtime = { path = "../com-api-sample-runtime" }
 com-api = { path = "../com-api" }

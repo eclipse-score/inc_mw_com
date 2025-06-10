@@ -55,10 +55,9 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Generic trait for all "factory-like" types
-pub trait Builder {
-    type Output;
+pub trait Builder<Output> {
     /// TODO: Should this be &mut self so that this can be turned into a trait object?
-    fn build(self) -> Result<Self::Output>;
+    fn build(self) -> Result<Output>;
 }
 
 /// This represents the com implementation and acts as a root for all types and objects provided by
@@ -67,9 +66,9 @@ pub trait Runtime {
     type Sample<'a, T: Reloc + Send + 'a>: Sample<T>;
 }
 
-pub trait RuntimeBuilder: Builder
+pub trait RuntimeBuilder<B>: Builder<B>
 where
-    <Self as Builder>::Output: Runtime,
+    B: Runtime,
 {
     fn load_config(&mut self, config: &Path) -> &mut Self;
 }
@@ -176,8 +175,8 @@ pub trait Producer {
 
 pub trait Consumer {}
 
-pub trait ProducerBuilder<I: Interface, R: Runtime>:
-    Builder<Output: Producer<Interface = I>>
+pub trait ProducerBuilder<I: Interface, R: Runtime, P: Producer<Interface = I>>:
+    Builder<P>
 {
 }
 
@@ -189,7 +188,7 @@ pub trait ServiceDiscovery<I: Interface, R: Runtime> {
     // TODO: Provide an async stream for newly available services / ServiceDescriptors
 }
 
-pub trait ConsumerBuilder<I: Interface, R: Runtime>: Builder<Output: Consumer> {}
+pub trait ConsumerBuilder<I: Interface, R: Runtime> {}
 
 pub trait ConsumerDescriptor<I: Interface, R: Runtime>: Clone {
     type ConsumerBuilder: ConsumerBuilder<I, R>;

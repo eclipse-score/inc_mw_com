@@ -19,7 +19,10 @@ use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
-use com_api::{Builder, Reloc, Runtime, SampleContainer, Subscriber, Subscription};
+use com_api::{
+    Builder, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, Reloc, Runtime,
+    SampleContainer, ServiceDiscovery, Subscriber, Subscription,
+};
 
 pub struct RuntimeImpl {}
 
@@ -286,6 +289,112 @@ where
             data: MaybeUninit::uninit(),
             _lifetime: PhantomData,
         })
+    }
+}
+
+pub struct SampleConsumerDiscovery<I> {
+    _interface: PhantomData<I>,
+}
+
+impl<I> SampleConsumerDiscovery<I> {
+    fn new(_runtime: &RuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
+        Self {
+            _interface: PhantomData,
+        }
+    }
+}
+
+impl<I: Interface> ServiceDiscovery<I, RuntimeImpl> for SampleConsumerDiscovery<I>
+where
+    SampleConsumerDescriptor<I>: ConsumerDescriptor<I, RuntimeImpl>,
+{
+    type ConsumerDescriptor = SampleConsumerDescriptor<I>;
+    type ServiceEnumerator = Vec<SampleConsumerDescriptor<I>>;
+
+    fn get_available_instances(&self) -> com_api::Result<Self::ServiceEnumerator> {
+        Ok(Vec::new())
+    }
+}
+
+pub struct SampleProducerBuilder<I: Interface> {
+    instance_specifier: InstanceSpecifier,
+    _interface: PhantomData<I>,
+}
+
+impl<I: Interface> SampleProducerBuilder<I> {
+    fn new(_runtime: &RuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
+        Self {
+            instance_specifier,
+            _interface: PhantomData,
+        }
+    }
+}
+
+pub struct SampleConsumerDescriptor<I: Interface> {
+    _interface: PhantomData<I>,
+}
+
+impl<I: Interface> Clone for SampleConsumerDescriptor<I> {
+    fn clone(&self) -> Self {
+        Self {
+            _interface: PhantomData,
+        }
+    }
+}
+
+impl<I: Interface> ConsumerDescriptor<I, RuntimeImpl> for SampleConsumerDescriptor<I>
+where
+    SampleConsumerBuilder<I>: ConsumerBuilder<I, RuntimeImpl>,
+{
+    type ConsumerBuilder = SampleConsumerBuilder<I>;
+
+    fn get_instance_id(&self) -> usize {
+        todo!()
+    }
+
+    fn into_builder(self) -> Self::ConsumerBuilder {
+        todo!()
+    }
+}
+
+pub struct SampleConsumerBuilder<I: Interface> {
+    instance_specifier: InstanceSpecifier,
+    _interface: PhantomData<I>,
+}
+
+pub struct RuntimeBuilderImpl {}
+
+impl Builder<RuntimeImpl> for RuntimeBuilderImpl {
+    fn build(self) -> com_api::Result<RuntimeImpl> {
+        Ok(RuntimeImpl {})
+    }
+}
+
+/// Entry point for the default implementation for the com module of s-core
+impl com_api::RuntimeBuilder<RuntimeImpl> for RuntimeBuilderImpl {
+    fn load_config(&mut self, _config: &Path) -> &mut Self {
+        self
+    }
+}
+
+impl RuntimeBuilderImpl {
+    /// Creates a new instance of the default implementation of the com layer
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn find_service<I: Interface>(
+        runtime: &RuntimeImpl,
+        instance_specifier: InstanceSpecifier,
+    ) -> SampleConsumerDiscovery<I> {
+        SampleConsumerDiscovery::new(runtime, instance_specifier)
+    }
+
+    pub fn create_provided_service<I: Interface>(
+        runtime: &RuntimeImpl,
+        instance_specifier: InstanceSpecifier,
+    ) -> SampleProducerBuilder<I> {
+        SampleProducerBuilder::new(runtime, instance_specifier)
     }
 }
 
