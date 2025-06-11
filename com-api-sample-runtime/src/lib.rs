@@ -33,7 +33,7 @@ impl Runtime for RuntimeImpl {
 impl RuntimeImpl {
     // TODO: Any chance that these can be moved to a trait so that this becomes more testable?
     // If yes, this trait is certainly located here since
-    pub fn find_instance<I: Interface>(
+    pub fn find_service<I: Interface>(
         &self,
         instance_specifier: InstanceSpecifier,
     ) -> SampleConsumerDiscovery<I> {
@@ -42,7 +42,7 @@ impl RuntimeImpl {
         }
     }
 
-    pub fn create_provided_service<I: Interface>(
+    pub fn producer_builder<I: Interface>(
         &self,
         instance_specifier: InstanceSpecifier,
     ) -> SampleProducerBuilder<I> {
