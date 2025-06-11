@@ -49,11 +49,10 @@ mod test {
         let available_services = consumer_discovery.get_available_instances().unwrap();
 
         // Create consumer from first discovered service
-        let descriptor = available_services
+        let consumer_builder = available_services
             .into_iter()
             .find(|desc| desc.get_instance_id() == 42)
             .unwrap();
-        let consumer_builder = descriptor.into_builder();
         let consumer = consumer_builder.build().unwrap();
 
         // Subscribe to one event

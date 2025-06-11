@@ -324,10 +324,10 @@ impl<I> SampleConsumerDiscovery<I> {
 
 impl<I: Interface> ServiceDiscovery<I, RuntimeImpl> for SampleConsumerDiscovery<I>
 where
-    SampleConsumerDescriptor<I>: ConsumerDescriptor<I, RuntimeImpl>,
+    SampleConsumerBuilder<I>: ConsumerBuilder<I, RuntimeImpl>,
 {
-    type ConsumerDescriptor = SampleConsumerDescriptor<I>;
-    type ServiceEnumerator = Vec<SampleConsumerDescriptor<I>>;
+    type ConsumerBuilder = SampleConsumerBuilder<I>;
+    type ServiceEnumerator = Vec<SampleConsumerBuilder<I>>;
 
     fn get_available_instances(&self) -> com_api::Result<Self::ServiceEnumerator> {
         Ok(Vec::new())
@@ -360,24 +360,15 @@ impl<I: Interface> Clone for SampleConsumerDescriptor<I> {
     }
 }
 
-impl<I: Interface> ConsumerDescriptor<I, RuntimeImpl> for SampleConsumerDescriptor<I>
-where
-    SampleConsumerBuilder<I>: ConsumerBuilder<I, RuntimeImpl>,
-{
-    type ConsumerBuilder = SampleConsumerBuilder<I>;
-
-    fn get_instance_id(&self) -> usize {
-        todo!()
-    }
-
-    fn into_builder(self) -> Self::ConsumerBuilder {
-        todo!()
-    }
-}
-
 pub struct SampleConsumerBuilder<I: Interface> {
     instance_specifier: InstanceSpecifier,
     _interface: PhantomData<I>,
+}
+
+impl<I: Interface> ConsumerDescriptor<RuntimeImpl> for SampleConsumerBuilder<I> {
+    fn get_instance_id(&self) -> usize {
+        todo!()
+    }
 }
 
 pub struct RuntimeBuilderImpl {}

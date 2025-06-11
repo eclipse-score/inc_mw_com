@@ -52,13 +52,14 @@ interface SampleMaybeUninit<T> {
 SampleMaybeUninit ..> SampleMut : builds
 Sample <.. SampleMut : builds
 
-class sample_runtime::RuntimeImpl
-
 Runtime <- RuntimeImpl
 
 interface ProducerBuilder {
   type Interface: Interface
 }
+
+RuntimeImpl ..> ProducerBuilder : creates
+
 interface Producer {
   type Interface: Interface
 }
@@ -72,8 +73,10 @@ Producer ..> OfferedProducer : offer()
 Producer <.. OfferedProducer : unoffer()
 
 interface ServiceDiscovery {
-  type Enumerator: IntoIterator<ConsumerDescriptor>
+  type Enumerator: IntoIterator<ConsumerBuilder>
 }
+
+RuntimeImpl ..> ServiceDiscovery : creates
 
 interface ConsumerDescriptor {
   type Interface: Interface
@@ -87,8 +90,8 @@ interface Consumer {
 
 Builder <-- ConsumerBuilder : Consumer<Producer>
 ServiceDiscovery ..> ServiceDiscovery::Enumerator : creates
-ServiceDiscovery::Enumerator o-- ConsumerDescriptor
-ConsumerDescriptor ..> ConsumerBuilder : creates
+ConsumerBuilder -o ServiceDiscovery::Enumerator
+ConsumerDescriptor <-- ConsumerBuilder
 ConsumerBuilder ..> Consumer : builds
 
 interface Subscriber<T>

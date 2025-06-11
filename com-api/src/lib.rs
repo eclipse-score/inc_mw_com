@@ -181,22 +181,18 @@ pub trait ProducerBuilder<I: Interface, R: Runtime, P: Producer<Interface = I>>:
 }
 
 pub trait ServiceDiscovery<I: Interface, R: Runtime> {
-    type ConsumerDescriptor: ConsumerDescriptor<I, R>;
-    type ServiceEnumerator: IntoIterator<Item = Self::ConsumerDescriptor>;
+    type ConsumerBuilder: ConsumerBuilder<I, R>;
+    type ServiceEnumerator: IntoIterator<Item = Self::ConsumerBuilder>;
 
     fn get_available_instances(&self) -> Result<Self::ServiceEnumerator>;
     // TODO: Provide an async stream for newly available services / ServiceDescriptors
 }
 
-pub trait ConsumerBuilder<I: Interface, R: Runtime> {}
-
-pub trait ConsumerDescriptor<I: Interface, R: Runtime>: Clone {
-    type ConsumerBuilder: ConsumerBuilder<I, R>;
-
-    /// Example property of available services, more to come?
+pub trait ConsumerDescriptor<R: Runtime> {
     fn get_instance_id(&self) -> usize; // TODO: Turn return type into separate type
-    fn into_builder(self) -> Self::ConsumerBuilder;
 }
+
+pub trait ConsumerBuilder<I: Interface, R: Runtime>: ConsumerDescriptor<R> {}
 
 pub trait Subscriber<T: Reloc + Send> {
     type Subscription: Subscription<T>;
