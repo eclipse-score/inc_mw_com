@@ -11,9 +11,8 @@
 '
 ' SPDX-License-Identifier: Apache-2.0
 
-interface Builder {
-    type Output
-    build() : Self::Output
+interface Builder<Output> {
+    build() : Output
 }
 
 ' Also called "Node"
@@ -26,7 +25,7 @@ Interface RuntimeBuilder {
     build(self): Self::Runtime
 }
 
-Builder <-- RuntimeBuilder : Builder::Output: Runtime
+Builder <-- RuntimeBuilder : Builder<Runtime>
 RuntimeBuilder ..> Runtime : builds
 
 interface Deref
@@ -67,6 +66,7 @@ interface OfferedProducer {
   type Interface: Interface
 }
 
+Builder <-- ProducerBuilder : Builder<Producer>
 ProducerBuilder ..> Producer : builds
 Producer ..> OfferedProducer : offer()
 Producer <.. OfferedProducer : unoffer()
@@ -85,6 +85,7 @@ interface Consumer {
   type Interface: Interface
 }
 
+Builder <-- ConsumerBuilder : Consumer<Producer>
 ServiceDiscovery ..> ServiceDiscovery::Enumerator : creates
 ServiceDiscovery::Enumerator o-- ConsumerDescriptor
 ConsumerDescriptor ..> ConsumerBuilder : creates
