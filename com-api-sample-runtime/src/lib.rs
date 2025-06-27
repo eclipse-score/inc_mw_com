@@ -266,26 +266,20 @@ where
         Default::default()
     }
 
-    fn try_receive<'a, C>(&self, scratch: C, max_samples: usize) -> (C, com_api::Result<usize>)
-    where
-        Self: 'a,
-        T: 'a,
-        C: SampleContainer<Self::Sample<'a>> + 'a,
-    {
+    fn try_receive<'a>(
+        &'a self,
+        scratch: SampleContainer<Self::Sample<'a>>,
+        max_samples: usize,
+    ) -> (SampleContainer<Self::Sample<'a>>, com_api::Result<usize>) {
         todo!()
     }
 
-    fn receive<'a, C>(
-        &self,
-        scratch: C,
+    fn receive<'a>(
+        &'a self,
+        scratch: SampleContainer<Self::Sample<'a>>,
         new_samples: usize,
         max_samples: usize,
-    ) -> impl Future<Output = (C, com_api::Result<usize>)> + Send
-    where
-        Self: 'a,
-        T: 'a,
-        C: SampleContainer<Self::Sample<'a>> + 'a,
-    {
+    ) -> impl Future<Output = (SampleContainer<Sample<T>>, com_api::Result<usize>)> + Send {
         async { todo!() }
     }
 }
@@ -395,18 +389,21 @@ impl RuntimeBuilderImpl {
 
 #[cfg(test)]
 mod test {
-    use com_api::Subscription;
-    use std::collections::VecDeque;
+    use com_api::{SampleContainer, Subscription};
 
     #[test]
     fn receive_stuff() {
         let test_subscriber = super::SubscriberImpl::<u32>::new();
         for _ in 0..10 {
-            let sample_buf = VecDeque::new();
+            let sample_buf = SampleContainer::new();
             match test_subscriber.try_receive(sample_buf, 1) {
                 (_, Ok(0)) => panic!("No sample received"),
                 (sample_buf, Ok(x)) => {
-                    println!("{} samples received: sample[0] = {}", x, *sample_buf[0])
+                    println!(
+                        "{} samples received: sample[0] = {}",
+                        x,
+                        *sample_buf.front().unwrap()
+                    )
                 }
                 (_, Err(e)) => panic!("{:?}", e),
             }
@@ -418,11 +415,15 @@ mod test {
         let test_subscriber = super::SubscriberImpl::<u32>::new();
         // block on an asynchronous reception of data from test_subscriber
         futures::executor::block_on(async {
-            let sample_buf = VecDeque::new();
+            let sample_buf = SampleContainer::new();
             match test_subscriber.receive(sample_buf, 1, 1).await {
                 (_, Ok(0)) => panic!("No sample received"),
                 (sample_buf, Ok(x)) => {
-                    println!("{} samples received: sample[0] = {}", x, *sample_buf[0])
+                    println!(
+                        "{} samples received: sample[0] = {}",
+                        x,
+                        *sample_buf.front().unwrap()
+                    )
                 }
                 (_, Err(e)) => panic!("{:?}", e),
             }
