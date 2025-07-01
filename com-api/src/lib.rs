@@ -283,9 +283,9 @@ pub trait Subscription<T: Reloc + Send> {
     /// TODO: samples.
     fn try_receive<'a>(
         &'a self,
-        scratch: SampleContainer<Self::Sample<'a>>,
+        scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         max_samples: usize,
-    ) -> (SampleContainer<Self::Sample<'a>>, Result<usize>);
+    ) -> Result<usize>;
 
     /// This method returns a future that resolves as soon as at least `new_samples` samples have
     /// been transferred from the communication buffer to the sample container.
@@ -296,8 +296,8 @@ pub trait Subscription<T: Reloc + Send> {
     /// TODO: See above for C++ limitations.
     fn receive<'a>(
         &'a self,
-        scratch: SampleContainer<Self::Sample<'a>>,
+        scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         new_samples: usize,
         max_samples: usize,
-    ) -> impl Future<Output = (SampleContainer<Self::Sample<'a>>, Result<usize>)> + Send;
+    ) -> impl Future<Output = Result<usize>> + Send;
 }

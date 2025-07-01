@@ -268,18 +268,18 @@ where
 
     fn try_receive<'a>(
         &'a self,
-        scratch: SampleContainer<Self::Sample<'a>>,
+        scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         max_samples: usize,
-    ) -> (SampleContainer<Self::Sample<'a>>, com_api::Result<usize>) {
+    ) -> com_api::Result<usize> {
         todo!()
     }
 
     fn receive<'a>(
         &'a self,
-        scratch: SampleContainer<Self::Sample<'a>>,
+        scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         new_samples: usize,
         max_samples: usize,
-    ) -> impl Future<Output = (SampleContainer<Sample<T>>, com_api::Result<usize>)> + Send {
+    ) -> impl Future<Output = com_api::Result<usize>> + Send {
         async { todo!() }
     }
 }
@@ -395,17 +395,18 @@ mod test {
     fn receive_stuff() {
         let test_subscriber = super::SubscriberImpl::<u32>::new();
         for _ in 0..10 {
-            let sample_buf = SampleContainer::new();
-            match test_subscriber.try_receive(sample_buf, 1) {
-                (_, Ok(0)) => panic!("No sample received"),
-                (sample_buf, Ok(x)) => {
+            let mut sample_buf = SampleContainer::new();
+            let receive_result = test_subscriber.try_receive(&mut sample_buf, 1);
+            match receive_result {
+                Ok(0) => panic!("No sample received"),
+                Ok(x) => {
                     println!(
                         "{} samples received: sample[0] = {}",
                         x,
                         *sample_buf.front().unwrap()
                     )
                 }
-                (_, Err(e)) => panic!("{:?}", e),
+                Err(e) => panic!("{:?}", e),
             }
         }
     }
@@ -415,17 +416,17 @@ mod test {
         let test_subscriber = super::SubscriberImpl::<u32>::new();
         // block on an asynchronous reception of data from test_subscriber
         futures::executor::block_on(async {
-            let sample_buf = SampleContainer::new();
-            match test_subscriber.receive(sample_buf, 1, 1).await {
-                (_, Ok(0)) => panic!("No sample received"),
-                (sample_buf, Ok(x)) => {
+            let mut sample_buf = SampleContainer::new();
+            match test_subscriber.receive(&mut sample_buf, 1, 1).await {
+                Ok(0) => panic!("No sample received"),
+                Ok(x) => {
                     println!(
                         "{} samples received: sample[0] = {}",
                         x,
                         *sample_buf.front().unwrap()
                     )
                 }
-                (_, Err(e)) => panic!("{:?}", e),
+                Err(e) => panic!("{:?}", e),
             }
         })
     }
