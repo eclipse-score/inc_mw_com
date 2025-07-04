@@ -242,7 +242,7 @@ impl<S> SampleContainer<S> {
     where
         S: Sample<T>,
     {
-        self.inner.get(0).map(<S as Deref>::deref)
+        self.inner.front().map(<S as Deref>::deref)
     }
 }
 

@@ -16,12 +16,10 @@ fn main() {
 #[cfg(test)]
 mod test {
     use com_api::{
-        Builder, ConsumerDescriptor, InstanceSpecifier, Producer, Runtime, Sample, SampleContainer,
+        Builder, ConsumerDescriptor, InstanceSpecifier, Producer, SampleContainer,
         SampleMaybeUninit, SampleMut, ServiceDiscovery, Subscriber, Subscription,
     };
     use com_api_sample_gen::{Tire, VehicleInterface};
-    use com_api_sample_runtime::RuntimeBuilderImpl;
-    use std::collections::VecDeque;
 
     #[test]
     fn create_producer() {

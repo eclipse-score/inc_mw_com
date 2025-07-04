@@ -35,7 +35,7 @@ impl RuntimeImpl {
     // If yes, this trait is certainly located here since
     pub fn find_service<I: Interface>(
         &self,
-        instance_specifier: InstanceSpecifier,
+        _instance_specifier: InstanceSpecifier,
     ) -> SampleConsumerDiscovery<I> {
         SampleConsumerDiscovery {
             _interface: PhantomData,
@@ -46,7 +46,7 @@ impl RuntimeImpl {
         &self,
         instance_specifier: InstanceSpecifier,
     ) -> SampleProducerBuilder<I> {
-        SampleProducerBuilder::new(&self, instance_specifier)
+        SampleProducerBuilder::new(self, instance_specifier)
     }
 }
 
@@ -125,8 +125,8 @@ impl<'a, T> PartialOrd for Sample<'a, T>
 where
     T: Send + Reloc,
 {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -224,7 +224,7 @@ impl<T> Default for SubscribableImpl<T> {
 impl<T: Reloc + Send> Subscriber<T> for SubscribableImpl<T> {
     type Subscription = SubscriberImpl<T>;
 
-    fn subscribe(self, max_num_samples: usize) -> com_api::Result<Self::Subscription> {
+    fn subscribe(self, _max_num_samples: usize) -> com_api::Result<Self::Subscription> {
         Ok(SubscriberImpl::new())
     }
 }
@@ -268,17 +268,18 @@ where
 
     fn try_receive<'a>(
         &'a self,
-        scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
-        max_samples: usize,
+        _scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
+        _max_samples: usize,
     ) -> com_api::Result<usize> {
         todo!()
     }
 
+    #[allow(clippy::manual_async_fn)]
     fn receive<'a>(
         &'a self,
-        scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
-        new_samples: usize,
-        max_samples: usize,
+        _scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
+        _new_samples: usize,
+        _max_samples: usize,
     ) -> impl Future<Output = com_api::Result<usize>> + Send {
         async { todo!() }
     }
@@ -286,6 +287,15 @@ where
 
 pub struct Publisher<T> {
     _data: PhantomData<T>,
+}
+
+impl<T> Default for Publisher<T>
+where
+    T: Reloc + Send,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T> Publisher<T>
@@ -296,7 +306,7 @@ where
         Self { _data: PhantomData }
     }
 
-    pub fn allocate(&self) -> com_api::Result<SampleMaybeUninit<T>> {
+    pub fn allocate<'a>(&'a self) -> com_api::Result<SampleMaybeUninit<'a, T>> {
         Ok(SampleMaybeUninit {
             data: MaybeUninit::uninit(),
             _lifetime: PhantomData,
@@ -309,7 +319,7 @@ pub struct SampleConsumerDiscovery<I> {
 }
 
 impl<I> SampleConsumerDiscovery<I> {
-    fn new(_runtime: &RuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
+    fn new(_runtime: &RuntimeImpl, _instance_specifier: InstanceSpecifier) -> Self {
         Self {
             _interface: PhantomData,
         }
@@ -377,6 +387,12 @@ impl Builder<RuntimeImpl> for RuntimeBuilderImpl {
 impl com_api::RuntimeBuilder<RuntimeImpl> for RuntimeBuilderImpl {
     fn load_config(&mut self, _config: &Path) -> &mut Self {
         self
+    }
+}
+
+impl Default for RuntimeBuilderImpl {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
