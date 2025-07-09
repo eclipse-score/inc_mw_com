@@ -200,43 +200,57 @@ pub trait Subscriber<T: Reloc + Send> {
     fn subscribe(self, max_num_samples: usize) -> Result<Self::Subscription>;
 }
 
-pub trait SampleContainer<S>: IntoIterator<Item = S> {
-    fn iter<'a, T>(&'a self) -> impl Iterator<Item = &'a T>
-    where
-        S: Sample<T>,
-        T: Reloc + Send + 'a;
-
-    /// Will remove the first element from the container (if any) and return it to the user.
-    fn pop_front(&mut self) -> Option<S>;
-
-    /// Will add a sample to the end of the container.
-    fn push_back(&mut self, new: S) -> Result<()>;
+pub struct SampleContainer<S> {
+    inner: VecDeque<S>,
 }
 
-impl<S> SampleContainer<S> for VecDeque<S> {
-    fn iter<'a, T>(&'a self) -> impl Iterator<Item = &'a T>
+impl<S> Default for SampleContainer<S> {
+    fn default() -> Self {
+        Self {
+            inner: VecDeque::new(),
+        }
+    }
+}
+
+impl<S> SampleContainer<S> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn iter<'a, T>(&'a self) -> impl Iterator<Item = &'a T>
     where
         S: Sample<T>,
         T: Reloc + Send + 'a,
     {
-        self.iter().map(<S as Deref>::deref)
+        self.inner.iter().map(<S as Deref>::deref)
     }
 
-    fn pop_front(&mut self) -> Option<S> {
-        self.pop_front()
+    pub fn pop_front(&mut self) -> Option<S> {
+        self.inner.pop_front()
     }
 
-    fn push_back(&mut self, new: S) -> Result<()> {
-        self.push_back(new);
+    pub fn push_back(&mut self, new: S) -> Result<()> {
+        self.inner.push_back(new);
         Ok(())
+    }
+
+    pub fn sample_count(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn front<T: Reloc + Send>(&self) -> Option<&T>
+    where
+        S: Sample<T>,
+    {
+        self.inner.front().map(<S as Deref>::deref)
     }
 }
 
 pub trait Subscription<T: Reloc + Send> {
     type Subscriber: Subscriber<T>;
-    type Sample<'a>
+    type Sample<'a>: Sample<T>
     where
-        T: 'a;
+        Self: 'a;
 
     fn unsubscribe(self) -> Self::Subscriber;
 
@@ -267,11 +281,11 @@ pub trait Subscription<T: Reloc + Send> {
     ///
     /// TODO: C++ cannot fully support this yet since there is no way to retain potentially-reusable
     /// TODO: samples.
-    fn try_receive<'a, C>(&self, scratch: C, max_samples: usize) -> (C, Result<usize>)
-    where
-        Self: 'a,
-        T: 'a,
-        C: SampleContainer<Self::Sample<'a>> + 'a;
+    fn try_receive<'a>(
+        &'a self,
+        scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
+        max_samples: usize,
+    ) -> Result<usize>;
 
     /// This method returns a future that resolves as soon as at least `new_samples` samples have
     /// been transferred from the communication buffer to the sample container.
@@ -280,14 +294,10 @@ pub trait Subscription<T: Reloc + Send> {
     /// to `try_receive`.
     ///
     /// TODO: See above for C++ limitations.
-    fn receive<'a, C>(
-        &self,
-        scratch: C,
+    fn receive<'a>(
+        &'a self,
+        scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         new_samples: usize,
         max_samples: usize,
-    ) -> impl Future<Output = (C, Result<usize>)> + Send
-    where
-        Self: 'a,
-        T: 'a,
-        C: SampleContainer<Self::Sample<'a>> + 'a;
+    ) -> impl Future<Output = Result<usize>> + Send;
 }

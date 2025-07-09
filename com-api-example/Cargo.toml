@@ -11,3 +11,4 @@ license = "Apache-2.0"
 com-api = { path = "../com-api" }
 com-api-sample-gen = { path = "../com-api-sample-gen" }
 com-api-sample-runtime = { path = "../com-api-sample-runtime" }
+tokio = { version = "~1.43", features = ["rt-multi-thread", "macros", "test-util"] }

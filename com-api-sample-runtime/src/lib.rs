@@ -35,7 +35,7 @@ impl RuntimeImpl {
     // If yes, this trait is certainly located here since
     pub fn find_service<I: Interface>(
         &self,
-        instance_specifier: InstanceSpecifier,
+        _instance_specifier: InstanceSpecifier,
     ) -> SampleConsumerDiscovery<I> {
         SampleConsumerDiscovery {
             _interface: PhantomData,
@@ -46,7 +46,7 @@ impl RuntimeImpl {
         &self,
         instance_specifier: InstanceSpecifier,
     ) -> SampleProducerBuilder<I> {
-        SampleProducerBuilder::new(&self, instance_specifier)
+        SampleProducerBuilder::new(self, instance_specifier)
     }
 }
 
@@ -125,8 +125,8 @@ impl<'a, T> PartialOrd for Sample<'a, T>
 where
     T: Send + Reloc,
 {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -224,7 +224,7 @@ impl<T> Default for SubscribableImpl<T> {
 impl<T: Reloc + Send> Subscriber<T> for SubscribableImpl<T> {
     type Subscription = SubscriberImpl<T>;
 
-    fn subscribe(self, max_num_samples: usize) -> com_api::Result<Self::Subscription> {
+    fn subscribe(self, _max_num_samples: usize) -> com_api::Result<Self::Subscription> {
         Ok(SubscriberImpl::new())
     }
 }
@@ -266,32 +266,36 @@ where
         Default::default()
     }
 
-    fn try_receive<'a, C>(&self, scratch: C, max_samples: usize) -> (C, com_api::Result<usize>)
-    where
-        Self: 'a,
-        T: 'a,
-        C: SampleContainer<Self::Sample<'a>> + 'a,
-    {
+    fn try_receive<'a>(
+        &'a self,
+        _scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
+        _max_samples: usize,
+    ) -> com_api::Result<usize> {
         todo!()
     }
 
-    fn receive<'a, C>(
-        &self,
-        scratch: C,
-        new_samples: usize,
-        max_samples: usize,
-    ) -> impl Future<Output = (C, com_api::Result<usize>)> + Send
-    where
-        Self: 'a,
-        T: 'a,
-        C: SampleContainer<Self::Sample<'a>> + 'a,
-    {
+    #[allow(clippy::manual_async_fn)]
+    fn receive<'a>(
+        &'a self,
+        _scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
+        _new_samples: usize,
+        _max_samples: usize,
+    ) -> impl Future<Output = com_api::Result<usize>> + Send {
         async { todo!() }
     }
 }
 
 pub struct Publisher<T> {
     _data: PhantomData<T>,
+}
+
+impl<T> Default for Publisher<T>
+where
+    T: Reloc + Send,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T> Publisher<T>
@@ -302,7 +306,7 @@ where
         Self { _data: PhantomData }
     }
 
-    pub fn allocate(&self) -> com_api::Result<SampleMaybeUninit<T>> {
+    pub fn allocate<'a>(&'a self) -> com_api::Result<SampleMaybeUninit<'a, T>> {
         Ok(SampleMaybeUninit {
             data: MaybeUninit::uninit(),
             _lifetime: PhantomData,
@@ -315,7 +319,7 @@ pub struct SampleConsumerDiscovery<I> {
 }
 
 impl<I> SampleConsumerDiscovery<I> {
-    fn new(_runtime: &RuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
+    fn new(_runtime: &RuntimeImpl, _instance_specifier: InstanceSpecifier) -> Self {
         Self {
             _interface: PhantomData,
         }
@@ -386,6 +390,12 @@ impl com_api::RuntimeBuilder<RuntimeImpl> for RuntimeBuilderImpl {
     }
 }
 
+impl Default for RuntimeBuilderImpl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RuntimeBuilderImpl {
     /// Creates a new instance of the default implementation of the com layer
     pub fn new() -> Self {
@@ -395,20 +405,24 @@ impl RuntimeBuilderImpl {
 
 #[cfg(test)]
 mod test {
-    use com_api::Subscription;
-    use std::collections::VecDeque;
+    use com_api::{SampleContainer, Subscription};
 
     #[test]
     fn receive_stuff() {
         let test_subscriber = super::SubscriberImpl::<u32>::new();
         for _ in 0..10 {
-            let sample_buf = VecDeque::new();
-            match test_subscriber.try_receive(sample_buf, 1) {
-                (_, Ok(0)) => panic!("No sample received"),
-                (sample_buf, Ok(x)) => {
-                    println!("{} samples received: sample[0] = {}", x, *sample_buf[0])
+            let mut sample_buf = SampleContainer::new();
+            let receive_result = test_subscriber.try_receive(&mut sample_buf, 1);
+            match receive_result {
+                Ok(0) => panic!("No sample received"),
+                Ok(x) => {
+                    println!(
+                        "{} samples received: sample[0] = {}",
+                        x,
+                        *sample_buf.front().unwrap()
+                    )
                 }
-                (_, Err(e)) => panic!("{:?}", e),
+                Err(e) => panic!("{:?}", e),
             }
         }
     }
@@ -418,13 +432,17 @@ mod test {
         let test_subscriber = super::SubscriberImpl::<u32>::new();
         // block on an asynchronous reception of data from test_subscriber
         futures::executor::block_on(async {
-            let sample_buf = VecDeque::new();
-            match test_subscriber.receive(sample_buf, 1, 1).await {
-                (_, Ok(0)) => panic!("No sample received"),
-                (sample_buf, Ok(x)) => {
-                    println!("{} samples received: sample[0] = {}", x, *sample_buf[0])
+            let mut sample_buf = SampleContainer::new();
+            match test_subscriber.receive(&mut sample_buf, 1, 1).await {
+                Ok(0) => panic!("No sample received"),
+                Ok(x) => {
+                    println!(
+                        "{} samples received: sample[0] = {}",
+                        x,
+                        *sample_buf.front().unwrap()
+                    )
                 }
-                (_, Err(e)) => panic!("{:?}", e),
+                Err(e) => panic!("{:?}", e),
             }
         })
     }

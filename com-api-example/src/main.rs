@@ -16,11 +16,10 @@ fn main() {
 #[cfg(test)]
 mod test {
     use com_api::{
-        Builder, ConsumerDescriptor, InstanceSpecifier, Producer, SampleMaybeUninit, SampleMut,
-        ServiceDiscovery, Subscriber, Subscription,
+        Builder, ConsumerDescriptor, InstanceSpecifier, Producer, SampleContainer,
+        SampleMaybeUninit, SampleMut, ServiceDiscovery, Subscriber, Subscription,
     };
     use com_api_sample_gen::{Tire, VehicleInterface};
-    use std::collections::VecDeque;
 
     #[test]
     fn create_producer() {
@@ -58,17 +57,56 @@ mod test {
         let subscribed = consumer.left_tire.subscribe(3).unwrap();
 
         // Create sample buffer to be used during receive
-        let mut sample_buf = Some(VecDeque::new());
+        let mut sample_buf = SampleContainer::new();
         for _ in 0..10 {
-            match subscribed.try_receive(sample_buf.take().unwrap(), 1) {
-                (_, Ok(0)) => panic!("No sample received"),
-                (mut buf, Ok(x)) => {
-                    let sample = buf.pop_front().unwrap();
-                    sample_buf = Some(buf); // Reuse the buffer
+            match subscribed.try_receive(&mut sample_buf, 1) {
+                Ok(0) => panic!("No sample received"),
+                Ok(x) => {
+                    let sample = sample_buf.pop_front().unwrap();
                     println!("{} samples received: sample[0] = {:?}", x, *sample)
                 }
-                (_, Err(e)) => panic!("{:?}", e),
+                Err(e) => panic!("{:?}", e),
             }
         }
+    }
+
+    async fn async_data_processor_fn(subscribed: impl Subscription<Tire>) {
+        let mut buffer = SampleContainer::new();
+        for _ in 0..10 {
+            match subscribed.receive(&mut buffer, 1, 1).await {
+                Ok(0) => panic!("No sample received"),
+                Ok(num_samples) => {
+                    println!(
+                        "{} samples received: sample[0] = {:?}",
+                        num_samples,
+                        *buffer.front().unwrap()
+                    );
+                }
+                Err(e) => panic!("{:?}", e),
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn schedule_subscription_on_mt_scheduler() {
+        let runtime_builder = com_api_sample_runtime::RuntimeBuilderImpl::new();
+        let runtime = runtime_builder.build().unwrap();
+
+        let consumer_discovery = runtime.find_service::<VehicleInterface>(InstanceSpecifier {});
+        let available_service_instances = consumer_discovery.get_available_instances().unwrap();
+
+        // Create consumer from first discovered service
+        let consumer_builder = available_service_instances
+            .into_iter()
+            .find(|desc| desc.get_instance_id() == 42)
+            .unwrap();
+        let consumer = consumer_builder.build().unwrap();
+
+        // Subscribe to one event
+        let subscribed = consumer.left_tire.subscribe(3).unwrap();
+
+        tokio::spawn(async_data_processor_fn(subscribed))
+            .await
+            .expect("Error returned from task");
     }
 }
