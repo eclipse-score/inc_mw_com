@@ -172,10 +172,10 @@ where
     fn send(self) -> ComResult<()>;
 }
 
-/// The `Invoker` trait represents the client-side stub of remote procedures.
+/// The `ClientConcept` trait represents the client-side stub of remote procedures.
 ///
 /// With an invoker the client issues invocation requests to the service side.
-pub trait InvokerConcept<A, F, Args, R>: Send
+pub trait ClientConcept<A, F, Args, R>: Send
 where
     A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
@@ -200,7 +200,7 @@ where
         &self,
         args: Args,
     ) -> ComResult<
-        <<Self as InvokerConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
+        <<Self as ClientConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
             A,
             F,
             Args,
@@ -221,7 +221,7 @@ where
         &self,
         args: Args,
     ) -> ComResult<
-        <<<<Self as InvokerConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
+        <<<<Self as ClientConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
             A,
             F,
             Args,
@@ -249,7 +249,7 @@ where
         args: Args,
         timeout: Duration,
     ) -> ComResult<
-        <<<<Self as InvokerConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
+        <<<<Self as ClientConcept<A, F, Args, R>>::RequestMaybeUninit as RequestMaybeUninitConcept<
             A,
             F,
             Args,
@@ -287,10 +287,10 @@ where
     ) -> impl Future<Output = ComResult<R>> + Send;
 }
 
-/// The `Invoked` trait represents the service side skeleton of a remote procedure.
+/// The `ServerConcept` trait represents the service side skeleton of a remote procedure.
 ///
 /// The trait is used to receive and process incoming requests and send responses.
-pub trait InvokedConcept<A, F, Args, R>: Send
+pub trait ServerConcept<A, F, Args, R>: Send
 where
     A: TransportAdapterConcept + ?Sized,
     F: Fn(Args) -> R,
@@ -324,10 +324,10 @@ where
 
         // call the function with the received arguments
         // That this works is rustc magic. `Fn<Args>` will automatically regard `Args` as tuple.
-        let result = f(*request);
+        let response = f(*request);
 
         // build and send the response
-        request.respond(result)?;
+        request.respond(response)?;
         Ok(())
     }
 
@@ -388,14 +388,14 @@ where
     Args: Copy,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Invoker: InvokerConcept<A, F, Args, R>;
-    type Invoked: InvokedConcept<A, F, Args, R>;
+    type Client: ClientConcept<A, F, Args, R>;
+    type Server: ServerConcept<A, F, Args, R>;
 
     /// Get a client-side invoker for this remote procedure
-    fn invoker(&self) -> ComResult<Self::Invoker>;
+    fn client(&self) -> ComResult<Self::Client>;
 
     /// Get a service-side remote procedure skeleton, the `Invoked`
-    fn invoked(&self) -> ComResult<Self::Invoked>;
+    fn server(&self) -> ComResult<Self::Server>;
 }
 
 /// The Builder for an `Rpc` remote procedure type

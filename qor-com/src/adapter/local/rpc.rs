@@ -6,7 +6,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use super::Local;
+use super::LocalAdapter;
 use qor_core::prelude::*;
 
 use crate::base::*;
@@ -122,7 +122,7 @@ where
     }
 }
 
-impl<F, Args, R> RequestMaybeUninitConcept<Local, F, Args, R> for LocalRequestMaybeUninit<F, Args, R>
+impl<F, Args, R> RequestMaybeUninitConcept<LocalAdapter, F, Args, R> for LocalRequestMaybeUninit<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -200,7 +200,7 @@ where
     }
 }
 
-impl<F, Args, R> RequestMutConcept<Local, F, Args, R> for LocalRequestMut<F, Args, R>
+impl<F, Args, R> RequestMutConcept<LocalAdapter, F, Args, R> for LocalRequestMut<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -253,7 +253,7 @@ where
 {
 }
 
-impl<F, Args, R> PendingRequestConcept<Local, F, Args, R> for LocalPendingRequest<F, Args, R>
+impl<F, Args, R> PendingRequestConcept<LocalAdapter, F, Args, R> for LocalPendingRequest<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -423,7 +423,7 @@ where
     }
 }
 
-impl<F, Args, R> RequestConcept<Local, F, Args, R> for LocalRequest<F, Args, R>
+impl<F, Args, R> RequestConcept<LocalAdapter, F, Args, R> for LocalRequest<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -447,7 +447,7 @@ where
     inner: Arc<UnsafeCell<LocalRequestState<F, Args, R>>>,
 }
 
-impl<F, Args, R> ResponseMaybeUninitConcept<Local, F, Args, R> for LocalResponseMaybeUninit<F, Args, R>
+impl<F, Args, R> ResponseMaybeUninitConcept<LocalAdapter, F, Args, R> for LocalResponseMaybeUninit<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -521,7 +521,7 @@ where
     }
 }
 
-impl<F, Args, R> ResponseMutConcept<Local, F, Args, R> for LocalResponseMut<F, Args, R>
+impl<F, Args, R> ResponseMutConcept<LocalAdapter, F, Args, R> for LocalResponseMut<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -577,7 +577,7 @@ where
     }
 }
 
-impl<F, Args, R> ResponseConcept<Local, F, Args, R> for LocalResponse<F, Args, R>
+impl<F, Args, R> ResponseConcept<LocalAdapter, F, Args, R> for LocalResponse<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -586,7 +586,7 @@ where
 }
 
 // #[derive(Debug)]
-pub struct LocalInvoker<F, Args, R>
+pub struct LocalClient<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -595,7 +595,7 @@ where
     queue: PendingQueue<F, Args, R>,
 }
 
-unsafe impl<F, Args, R> Send for LocalInvoker<F, Args, R>
+unsafe impl<F, Args, R> Send for LocalClient<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -603,7 +603,7 @@ where
 {
 }
 
-unsafe impl<F, Args, R> Sync for LocalInvoker<F, Args, R>
+unsafe impl<F, Args, R> Sync for LocalClient<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy,
@@ -611,7 +611,7 @@ where
 {
 }
 
-impl<F, Args, R> InvokerConcept<Local, F, Args, R> for LocalInvoker<F, Args, R>
+impl<F, Args, R> ClientConcept<LocalAdapter, F, Args, R> for LocalClient<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy + Send,
@@ -637,7 +637,7 @@ where
 }
 
 // #[derive(Debug)]
-pub struct LocalInvoked<F, Args, R>
+pub struct LocalServer<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy + Send,
@@ -646,14 +646,14 @@ where
     queue: PendingQueue<F, Args, R>,
 }
 
-unsafe impl<F, Args, R> Send for LocalInvoked<F, Args, R>
+unsafe impl<F, Args, R> Send for LocalServer<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
 }
-unsafe impl<F, Args, R> Sync for LocalInvoked<F, Args, R>
+unsafe impl<F, Args, R> Sync for LocalServer<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy + Send,
@@ -661,7 +661,7 @@ where
 {
 }
 
-impl<F, Args, R> InvokedConcept<Local, F, Args, R> for LocalInvoked<F, Args, R>
+impl<F, Args, R> ServerConcept<LocalAdapter, F, Args, R> for LocalServer<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy + Send,
@@ -775,23 +775,23 @@ where
     }
 }
 
-impl<F, Args, R> RpcConcept<Local, F, Args, R> for LocalRpc<F, Args, R>
+impl<F, Args, R> RpcConcept<LocalAdapter, F, Args, R> for LocalRpc<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy + Send,
     R: Send + Copy + TypeTag + Coherent + Reloc,
 {
-    type Invoker = LocalInvoker<F, Args, R>;
-    type Invoked = LocalInvoked<F, Args, R>;
+    type Client = LocalClient<F, Args, R>;
+    type Server = LocalServer<F, Args, R>;
 
-    fn invoker(&self) -> ComResult<Self::Invoker> {
-        Ok(LocalInvoker {
+    fn client(&self) -> ComResult<Self::Client> {
+        Ok(LocalClient {
             queue: self.queue.clone(),
         })
     }
 
-    fn invoked(&self) -> ComResult<Self::Invoked> {
-        Ok(LocalInvoked {
+    fn server(&self) -> ComResult<Self::Server> {
+        Ok(LocalServer {
             queue: self.queue.clone(),
         })
     }
@@ -841,7 +841,7 @@ where
     }
 }
 
-impl<F, Args, R> RpcBuilderConcept<Local, F, Args, R> for LocalRpcBuilder<F, Args, R>
+impl<F, Args, R> RpcBuilderConcept<LocalAdapter, F, Args, R> for LocalRpcBuilder<F, Args, R>
 where
     F: Fn(Args) -> R,
     Args: Copy + Send,
