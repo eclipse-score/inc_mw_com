@@ -25,33 +25,35 @@ use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
 use com_api_concept::{
-    Builder, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, Reloc, Runtime,
-    SampleContainer, ServiceDiscovery, Subscriber, Subscription,
+    AdapterConcept, BuilderConcept, ConsumerBuilderConcept, ConsumerDescriptorConcept,
+    InstanceSpecifier, InterfaceConcept, Reloc, SampleConcept, SampleContainer,
+    SampleMaybeUninitConcept, SampleMutConcept, ServiceDiscoveryConcept, SubscriberConcept,
+    SubscriptionConcept,
 };
 
-pub struct MockRuntimeImpl {}
+pub struct MockAdapter {}
 
-impl Runtime for MockRuntimeImpl {
-    type Sample<'a, T: Reloc + Send + 'a + std::fmt::Debug> = Sample<'a, T>;
+impl AdapterConcept for MockAdapter {
+    type Sample<'a, T: Reloc + Send + 'a + std::fmt::Debug> = MockSample<'a, T>;
 }
 
-impl MockRuntimeImpl {
+impl MockAdapter {
     // TODO: Any chance that these can be moved to a trait so that this becomes more testable?
     // If yes, this trait is certainly located here since
-    pub fn find_service<I: Interface>(
+    pub fn find_service<I: InterfaceConcept>(
         &self,
         _instance_specifier: InstanceSpecifier,
-    ) -> SampleConsumerDiscovery<I> {
-        SampleConsumerDiscovery {
+    ) -> MockConsumerDiscovery<I> {
+        MockConsumerDiscovery {
             _interface: PhantomData,
         }
     }
 
-    pub fn producer_builder<I: Interface>(
+    pub fn producer_builder<I: InterfaceConcept>(
         &self,
         instance_specifier: InstanceSpecifier,
-    ) -> SampleProducerBuilder<I> {
-        SampleProducerBuilder::new(self, instance_specifier)
+    ) -> MockProducerBuilder<I> {
+        MockProducerBuilder::new(self, instance_specifier)
     }
 }
 
@@ -77,7 +79,7 @@ where
     Test(Box<T>),
 }
 
-pub struct Sample<'a, T>
+pub struct MockSample<'a, T>
 where
     T: Reloc + Send,
 {
@@ -87,7 +89,7 @@ where
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-impl<'a, T> From<T> for Sample<'a, T>
+impl<'a, T> From<T> for MockSample<'a, T>
 where
     T: Reloc + Send,
 {
@@ -99,7 +101,7 @@ where
     }
 }
 
-impl<'a, T> Deref for Sample<'a, T>
+impl<'a, T> Deref for MockSample<'a, T>
 where
     T: Reloc + Send,
 {
@@ -113,9 +115,9 @@ where
     }
 }
 
-impl<'a, T> com_api_concept::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
+impl<'a, T> SampleConcept<T> for MockSample<'a, T> where T: Send + Reloc {}
 
-impl<'a, T> PartialEq for Sample<'a, T>
+impl<'a, T> PartialEq for MockSample<'a, T>
 where
     T: Send + Reloc,
 {
@@ -124,9 +126,9 @@ where
     }
 }
 
-impl<'a, T> Eq for Sample<'a, T> where T: Send + Reloc {}
+impl<'a, T> Eq for MockSample<'a, T> where T: Send + Reloc {}
 
-impl<'a, T> PartialOrd for Sample<'a, T>
+impl<'a, T> PartialOrd for MockSample<'a, T>
 where
     T: Send + Reloc,
 {
@@ -135,7 +137,7 @@ where
     }
 }
 
-impl<'a, T> Ord for Sample<'a, T>
+impl<'a, T> Ord for MockSample<'a, T>
 where
     T: Send + Reloc,
 {
@@ -144,7 +146,7 @@ where
     }
 }
 
-pub struct SampleMut<'a, T>
+pub struct MockSampleMut<'a, T>
 where
     T: Reloc,
 {
@@ -152,11 +154,11 @@ where
     _lifetime: PhantomData<&'a T>,
 }
 
-impl<'a, T> com_api_concept::SampleMut<T> for SampleMut<'a, T>
+impl<'a, T> SampleMutConcept<T> for MockSampleMut<'a, T>
 where
     T: Reloc + Send,
 {
-    type Sample = Sample<'a, T>;
+    type Sample = MockSample<'a, T>;
 
     fn into_sample(self) -> Self::Sample {
         todo!()
@@ -167,7 +169,7 @@ where
     }
 }
 
-impl<'a, T> Deref for SampleMut<'a, T>
+impl<'a, T> Deref for MockSampleMut<'a, T>
 where
     T: Reloc,
 {
@@ -178,7 +180,7 @@ where
     }
 }
 
-impl<'a, T> DerefMut for SampleMut<'a, T>
+impl<'a, T> DerefMut for MockSampleMut<'a, T>
 where
     T: Reloc,
 {
@@ -187,7 +189,7 @@ where
     }
 }
 
-pub struct SampleMaybeUninit<'a, T>
+pub struct MockSampleMaybeUninit<'a, T>
 where
     T: Reloc + Send,
 {
@@ -195,54 +197,54 @@ where
     _lifetime: PhantomData<&'a T>,
 }
 
-impl<'a, T> com_api_concept::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
+impl<'a, T> SampleMaybeUninitConcept<T> for MockSampleMaybeUninit<'a, T>
 where
     T: Reloc + Send,
 {
-    type SampleMut = SampleMut<'a, T>;
+    type SampleMut = MockSampleMut<'a, T>;
 
-    fn write(self, val: T) -> SampleMut<'a, T> {
-        SampleMut {
+    fn write(self, val: T) -> Self::SampleMut {
+        Self::SampleMut {
             data: val,
             _lifetime: PhantomData,
         }
     }
 
-    unsafe fn assume_init(self) -> SampleMut<'a, T> { 
-        SampleMut {
+    unsafe fn assume_init(self) -> Self::SampleMut {
+        Self::SampleMut {
             data: unsafe { self.data.assume_init() },
             _lifetime: PhantomData,
         }
     }
 }
 
-pub struct SubscribableImpl<T> {
+pub struct MockSubscribable<T> {
     _data: PhantomData<T>,
 }
 
-impl<T> Default for SubscribableImpl<T> {
+impl<T> Default for MockSubscribable<T> {
     fn default() -> Self {
         Self { _data: PhantomData }
     }
 }
 
-impl<T: Reloc + Send> Subscriber<T> for SubscribableImpl<T> {
-    type Subscription = SubscriberImpl<T>;
+impl<T: Reloc + Send> SubscriberConcept<T> for MockSubscribable<T> {
+    type Subscription = MockSubscriber<T>;
 
     fn subscribe(self, _max_num_samples: usize) -> com_api_concept::Result<Self::Subscription> {
-        Ok(SubscriberImpl::new())
+        Ok(MockSubscriber::new())
     }
 }
 
 #[derive(Default)]
-pub struct SubscriberImpl<T>
+pub struct MockSubscriber<T>
 where
     T: Reloc + Send,
 {
     data: VecDeque<T>,
 }
 
-impl<T> SubscriberImpl<T>
+impl<T> MockSubscriber<T>
 where
     T: Reloc + Send,
 {
@@ -257,13 +259,13 @@ where
     }
 }
 
-impl<T> Subscription<T> for SubscriberImpl<T>
+impl<T> SubscriptionConcept<T> for MockSubscriber<T>
 where
     T: Reloc + Send,
 {
-    type Subscriber = SubscribableImpl<T>;
+    type Subscriber = MockSubscribable<T>;
     type Sample<'a>
-        = Sample<'a, T>
+        = MockSample<'a, T>
     where
         T: 'a;
 
@@ -290,11 +292,11 @@ where
     }
 }
 
-pub struct Publisher<T> {
+pub struct MockPublisher<T> {
     _data: PhantomData<T>,
 }
 
-impl<T> Default for Publisher<T>
+impl<T> Default for MockPublisher<T>
 where
     T: Reloc + Send,
 {
@@ -303,7 +305,7 @@ where
     }
 }
 
-impl<T> Publisher<T>
+impl<T> MockPublisher<T>
 where
     T: Reloc + Send,
 {
@@ -311,45 +313,45 @@ where
         Self { _data: PhantomData }
     }
 
-    pub fn allocate<'a>(&'a self) -> com_api_concept::Result<SampleMaybeUninit<'a, T>> {
-        Ok(SampleMaybeUninit {
+    pub fn allocate<'a>(&'a self) -> com_api_concept::Result<MockSampleMaybeUninit<'a, T>> {
+        Ok(MockSampleMaybeUninit {
             data: MaybeUninit::uninit(),
             _lifetime: PhantomData,
         })
     }
 }
 
-pub struct SampleConsumerDiscovery<I> {
+pub struct MockConsumerDiscovery<I> {
     _interface: PhantomData<I>,
 }
 
-impl<I> SampleConsumerDiscovery<I> {
-    fn new(_runtime: &MockRuntimeImpl, _instance_specifier: InstanceSpecifier) -> Self {
+impl<I> MockConsumerDiscovery<I> {
+    fn new(_runtime: &MockAdapter, _instance_specifier: InstanceSpecifier) -> Self {
         Self {
             _interface: PhantomData,
         }
     }
 }
 
-impl<I: Interface> ServiceDiscovery<I, MockRuntimeImpl> for SampleConsumerDiscovery<I>
+impl<I: InterfaceConcept> ServiceDiscoveryConcept<I, MockAdapter> for MockConsumerDiscovery<I>
 where
-    SampleConsumerBuilder<I>: ConsumerBuilder<I, MockRuntimeImpl>,
+    MockConsumerBuilder<I>: ConsumerBuilderConcept<I, MockAdapter>,
 {
-    type ConsumerBuilder = SampleConsumerBuilder<I>;
-    type ServiceEnumerator = Vec<SampleConsumerBuilder<I>>;
+    type ConsumerBuilder = MockConsumerBuilder<I>;
+    type ServiceEnumerator = Vec<MockConsumerBuilder<I>>;
 
     fn get_available_instances(&self) -> com_api_concept::Result<Self::ServiceEnumerator> {
         Ok(Vec::new())
     }
 }
 
-pub struct SampleProducerBuilder<I: Interface> {
+pub struct MockProducerBuilder<I: InterfaceConcept> {
     instance_specifier: InstanceSpecifier,
     _interface: PhantomData<I>,
 }
 
-impl<I: Interface> SampleProducerBuilder<I> {
-    fn new(_runtime: &MockRuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
+impl<I: InterfaceConcept> MockProducerBuilder<I> {
+    fn new(_runtime: &MockAdapter, instance_specifier: InstanceSpecifier) -> Self {
         Self {
             instance_specifier,
             _interface: PhantomData,
@@ -357,11 +359,11 @@ impl<I: Interface> SampleProducerBuilder<I> {
     }
 }
 
-pub struct SampleConsumerDescriptor<I: Interface> {
+pub struct MockConsumerDescriptor<I: InterfaceConcept> {
     _interface: PhantomData<I>,
 }
 
-impl<I: Interface> Clone for SampleConsumerDescriptor<I> {
+impl<I: InterfaceConcept> Clone for MockConsumerDescriptor<I> {
     fn clone(&self) -> Self {
         Self {
             _interface: PhantomData,
@@ -369,39 +371,39 @@ impl<I: Interface> Clone for SampleConsumerDescriptor<I> {
     }
 }
 
-pub struct SampleConsumerBuilder<I: Interface> {
+pub struct MockConsumerBuilder<I: InterfaceConcept> {
     instance_specifier: InstanceSpecifier,
     _interface: PhantomData<I>,
 }
 
-impl<I: Interface> ConsumerDescriptor<MockRuntimeImpl> for SampleConsumerBuilder<I> {
+impl<I: InterfaceConcept> ConsumerDescriptorConcept<MockAdapter> for MockConsumerBuilder<I> {
     fn get_instance_id(&self) -> usize {
         todo!()
     }
 }
 
-pub struct RuntimeBuilderImpl {}
+pub struct MockAdapterBuilder {}
 
-impl Builder<MockRuntimeImpl> for RuntimeBuilderImpl {
-    fn build(self) -> com_api_concept::Result<MockRuntimeImpl> {
-        Ok(MockRuntimeImpl {})
+impl BuilderConcept<MockAdapter> for MockAdapterBuilder {
+    fn build(self) -> com_api_concept::Result<MockAdapter> {
+        Ok(MockAdapter {})
     }
 }
 
 /// Entry point for the default implementation for the com module of s-core
-impl com_api_concept::RuntimeBuilder<MockRuntimeImpl> for RuntimeBuilderImpl {
+impl com_api_concept::AdapterBuilderConcept<MockAdapter> for MockAdapterBuilder {
     fn load_config(&mut self, _config: &Path) -> &mut Self {
         self
     }
 }
 
-impl Default for RuntimeBuilderImpl {
+impl Default for MockAdapterBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RuntimeBuilderImpl {
+impl MockAdapterBuilder {
     /// Creates a new instance of the default implementation of the com layer
     pub fn new() -> Self {
         Self {}
@@ -410,11 +412,11 @@ impl RuntimeBuilderImpl {
 
 #[cfg(test)]
 mod test {
-    use com_api_concept::{SampleContainer, Subscription};
+    use com_api_concept::{SampleContainer, SubscriptionConcept};
 
     #[test]
     fn receive_stuff() {
-        let test_subscriber = super::SubscriberImpl::<u32>::new();
+        let test_subscriber = super::MockSubscriber::<u32>::new();
         for _ in 0..10 {
             let mut sample_buf = SampleContainer::new();
             let receive_result = test_subscriber.try_receive(&mut sample_buf, 1);
@@ -434,7 +436,7 @@ mod test {
 
     #[test]
     fn receive_async_stuff() {
-        let test_subscriber = super::SubscriberImpl::<u32>::new();
+        let test_subscriber = super::MockSubscriber::<u32>::new();
         // block on an asynchronous reception of data from test_subscriber
         futures::executor::block_on(async {
             let mut sample_buf = SampleContainer::new();

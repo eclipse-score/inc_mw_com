@@ -14,21 +14,21 @@
 //! The actual implementations are provided by the `com-api-runtime-mock` and `com-api-runtime-lola` crates.
 //! The user must enable one of these features to use the COM API.
 
-
 #[cfg(not(any(feature = "mock", feature = "lola")))]
 compile_error!("You must enable at least one feature: `mock` or `lola`!");
 
-#[cfg(feature = "mock")]
-pub use com_api_runtime_mock::RuntimeBuilderImpl;
-#[cfg(feature = "mock")]
-pub use com_api_runtime_mock::MockRuntimeImpl;
 #[cfg(feature = "lola")]
-pub use com_api_runtime_lola::RuntimeBuilderImpl;
+pub use com_api_runtime_lola::LolaAdapter;
 #[cfg(feature = "lola")]
-pub use com_api_runtime_lola::LolaRuntimeImpl;
+pub use com_api_runtime_lola::LolaAdapterBuilder;
+#[cfg(feature = "mock")]
+pub use com_api_runtime_mock::MockAdapter;
+#[cfg(feature = "mock")]
+pub use com_api_runtime_mock::MockAdapterBuilder;
 
 pub use com_api_concept::{
-    Builder, Consumer, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface,
-    OfferedProducer, Producer, ProducerBuilder, Reloc, Result, SampleContainer, SampleMaybeUninit,
-    SampleMut, ServiceDiscovery, Subscriber, Subscription,
+    BuilderConcept, ConsumerBuilderConcept, ConsumerConcept, ConsumerDescriptorConcept,
+    InstanceSpecifier, InterfaceConcept, OfferedProducerConcept, ProducerBuilderConcept,
+    ProducerConcept, Reloc, Result, SampleConcept, SampleContainer, SampleMaybeUninitConcept,
+    SampleMutConcept, ServiceDiscoveryConcept, SubscriberConcept, SubscriptionConcept,
 };

@@ -12,7 +12,7 @@
 //! This crate defines the concepts and traits of the COM API. It does not provide any concrete
 //! implementations. It is meant to be used as a common interface for different implementations
 //! of the COM API, e.g., for different IPC backends.
-//! 
+//!
 //! # API Design principles
 //!
 //! - We stick to the builder pattern down to a single service (TODO: Should this be introduced to the C++ API?)
@@ -61,20 +61,20 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Generic trait for all "factory-like" types
-pub trait Builder<Output> {
+pub trait BuilderConcept<Output> {
     /// TODO: Should this be &mut self so that this can be turned into a trait object?
     fn build(self) -> Result<Output>;
 }
 
 /// This represents the com implementation and acts as a root for all types and objects provided by
 /// the implementation.
-pub trait Runtime {
-    type Sample<'a, T: Reloc + Send + std::fmt::Debug + 'a>: Sample<T>;
+pub trait AdapterConcept {
+    type Sample<'a, T: Reloc + Send + std::fmt::Debug + 'a>: SampleConcept<T>;
 }
 
-pub trait RuntimeBuilder<B>: Builder<B>
+pub trait AdapterBuilderConcept<B>: BuilderConcept<B>
 where
-    B: Runtime,
+    B: AdapterConcept,
 {
     fn load_config(&mut self, config: &Path) -> &mut Self;
 }
@@ -109,7 +109,7 @@ unsafe impl Reloc for u32 {}
 ///
 /// The ordering of SamplePtrs is total over the reception order
 // TODO: C++ doesn't yet support this. Expose API to compare SamplePtr ages.
-pub trait Sample<T>: Deref<Target = T> + Send + PartialOrd + Ord
+pub trait SampleConcept<T>: Deref<Target = T> + Send + PartialOrd + Ord
 where
     T: Send + Reloc,
 {
@@ -119,12 +119,12 @@ where
 ///
 /// By implementing the `DerefMut` trait implementations of the trait support the `.` operator for dereferencing.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait SampleMut<T>: DerefMut<Target = T>
+pub trait SampleMutConcept<T>: DerefMut<Target = T>
 where
     T: Send + Reloc,
 {
     /// The associated read-only sample type.
-    type Sample: Sample<T>;
+    type Sample: SampleConcept<T>;
 
     /// Consume the sample into an immutable sample.
     fn into_sample(self) -> Self::Sample;
@@ -140,12 +140,12 @@ where
 ///
 /// TODO: Shall we also require DerefMut<Target=MaybeUninit<T>> from implementing types? How to deal
 /// TODO: with the ambiguous assume_init() then?
-pub trait SampleMaybeUninit<T>
+pub trait SampleMaybeUninitConcept<T>
 where
     T: Send + Reloc,
 {
     /// Buffer type for mutable data after initialization
-    type SampleMut: SampleMut<T>;
+    type SampleMut: SampleMutConcept<T>;
     /// Render the buffer initialized for mutable access.
     ///
     /// This corresponds to `MaybeUninit::assume_init`.
@@ -162,45 +162,51 @@ where
     fn write(self, value: T) -> Self::SampleMut;
 }
 
-pub trait Interface {}
+pub trait InterfaceConcept {}
 
-pub trait OfferedProducer {
-    type Interface: Interface;
-    type Producer: Producer<Interface = Self::Interface>;
+pub trait OfferedProducerConcept {
+    type Interface: InterfaceConcept;
+    type Producer: ProducerConcept<Interface = Self::Interface>;
 
     fn unoffer(self) -> Self::Producer;
 }
 
-pub trait Producer {
-    type Interface: Interface;
-    type OfferedProducer: OfferedProducer<Interface = Self::Interface>;
+pub trait ProducerConcept {
+    type Interface: InterfaceConcept;
+    type OfferedProducer: OfferedProducerConcept<Interface = Self::Interface>;
 
     fn offer(self) -> Result<Self::OfferedProducer>;
 }
 
-pub trait Consumer {}
+pub trait ConsumerConcept {}
 
-pub trait ProducerBuilder<I: Interface, R: Runtime, P: Producer<Interface = I>>:
-    Builder<P>
+pub trait ProducerBuilderConcept<
+    I: InterfaceConcept,
+    R: AdapterConcept,
+    P: ProducerConcept<Interface = I>,
+>: BuilderConcept<P>
 {
 }
 
-pub trait ServiceDiscovery<I: Interface, R: Runtime> {
-    type ConsumerBuilder: ConsumerBuilder<I, R>;
+pub trait ServiceDiscoveryConcept<I: InterfaceConcept, R: AdapterConcept> {
+    type ConsumerBuilder: ConsumerBuilderConcept<I, R>;
     type ServiceEnumerator: IntoIterator<Item = Self::ConsumerBuilder>;
 
     fn get_available_instances(&self) -> Result<Self::ServiceEnumerator>;
     // TODO: Provide an async stream for newly available services / ServiceDescriptors
 }
 
-pub trait ConsumerDescriptor<R: Runtime> {
+pub trait ConsumerDescriptorConcept<R: AdapterConcept> {
     fn get_instance_id(&self) -> usize; // TODO: Turn return type into separate type
 }
 
-pub trait ConsumerBuilder<I: Interface, R: Runtime>: ConsumerDescriptor<R> {}
+pub trait ConsumerBuilderConcept<I: InterfaceConcept, R: AdapterConcept>:
+    ConsumerDescriptorConcept<R>
+{
+}
 
-pub trait Subscriber<T: Reloc + Send> {
-    type Subscription: Subscription<T>;
+pub trait SubscriberConcept<T: Reloc + Send> {
+    type Subscription: SubscriptionConcept<T>;
 
     fn subscribe(self, max_num_samples: usize) -> Result<Self::Subscription>;
 }
@@ -224,7 +230,7 @@ impl<S> SampleContainer<S> {
 
     pub fn iter<'a, T>(&'a self) -> impl Iterator<Item = &'a T>
     where
-        S: Sample<T>,
+        S: SampleConcept<T>,
         T: Reloc + Send + 'a,
     {
         self.inner.iter().map(<S as Deref>::deref)
@@ -245,15 +251,15 @@ impl<S> SampleContainer<S> {
 
     pub fn front<T: Reloc + Send>(&self) -> Option<&T>
     where
-        S: Sample<T>,
+        S: SampleConcept<T>,
     {
         self.inner.front().map(<S as Deref>::deref)
     }
 }
 
-pub trait Subscription<T: Reloc + Send> {
-    type Subscriber: Subscriber<T>;
-    type Sample<'a>: Sample<T>
+pub trait SubscriptionConcept<T: Reloc + Send> {
+    type Subscriber: SubscriberConcept<T>;
+    type Sample<'a>: SampleConcept<T>
     where
         Self: 'a;
 
