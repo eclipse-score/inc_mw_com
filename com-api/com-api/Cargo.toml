@@ -1,0 +1,15 @@
+[package]
+name = "com-api"
+version = "0.1.0"
+edition = "2024"
+publish = ["common"]
+license = "Apache-2.0"
+
+[features]
+iceoryx = ["com-api-runtime-iceoryx", "com-api-concept/iceoryx"]
+lola = ["com-api-runtime-lola", "com-api-concept/lola"]
+
+[dependencies]
+com-api-concept = { workspace = true }
+com-api-runtime-iceoryx = { workspace = true, optional = true  }
+com-api-runtime-lola = { workspace = true, optional = true  }

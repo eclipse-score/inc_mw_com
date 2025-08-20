@@ -1,0 +1,13 @@
+[package]
+name = "com-api-gen-lola"
+version = "0.1.0"
+edition = "2024"
+publish = ["common"]
+license = "Apache-2.0"
+
+[features]
+lola = ["com-api/lola"]
+
+[dependencies]
+com-api-runtime-lola = { workspace = true }
+com-api = { workspace = true }

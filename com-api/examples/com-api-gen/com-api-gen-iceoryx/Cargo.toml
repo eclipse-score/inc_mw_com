@@ -1,0 +1,13 @@
+[package]
+name = "com-api-gen-iceoryx"
+version = "0.1.0"
+edition = "2024"
+publish = ["common"]
+license = "Apache-2.0"
+
+[features]
+iceoryx = ["com-api/iceoryx"]
+
+[dependencies]
+com-api-runtime-iceoryx = { workspace = true }
+com-api = { workspace = true }

@@ -1,0 +1,14 @@
+[package]
+name = "com-api-gen"
+version = "0.1.0"
+edition = "2024"
+publish = ["common"]
+license = "Apache-2.0"
+
+[features]
+iceoryx = ["com-api-gen-iceoryx"]
+lola = ["com-api-gen-lola"]
+
+[dependencies]
+com-api-gen-iceoryx = { path = "com-api-gen-iceoryx", optional = true  }
+com-api-gen-lola = { path = "com-api-gen-lola", optional = true  }
