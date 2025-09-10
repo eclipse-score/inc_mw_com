@@ -3,7 +3,7 @@ resolver = "3"
 members = [
     "com-api",
     "com-api-concept",
-    "com-api-runtime-iceoryx",
+    "com-api-runtime-mock",
     "com-api-runtime-lola",
 
     "examples",
@@ -19,6 +19,6 @@ license = "Apache-2.0"
 [workspace.dependencies]
 com-api = { path = "com-api"}
 com-api-concept = { path = "com-api-concept"}
-com-api-runtime-iceoryx = { path = "com-api-runtime-iceoryx"}
+com-api-runtime-mock = { path = "com-api-runtime-mock"}
 com-api-runtime-lola = { path = "com-api-runtime-lola"}
 com-api-gen = { path = "examples/com-api-gen"}

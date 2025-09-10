@@ -19,7 +19,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
-use com_api::{
+use com_api_concept::{
     Builder, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, Reloc, Runtime,
     SampleContainer, ServiceDiscovery, Subscriber, Subscription,
 };
@@ -27,7 +27,7 @@ use com_api::{
 pub struct RuntimeImpl {}
 
 impl Runtime for RuntimeImpl {
-    type Sample<'a, T: Reloc + Send + 'a> = Sample<'a, T>;
+    type Sample<'a, T: Reloc + Send + 'a + std::fmt::Debug> = Sample<'a, T>;
 }
 
 impl RuntimeImpl {
@@ -50,25 +50,25 @@ impl RuntimeImpl {
     }
 }
 
-struct LolaEvent<T> {
+struct MockEvent<T> {
     event: PhantomData<T>,
 }
 
-struct LolaBinding<'a, T>
+struct MockBinding<'a, T>
 where
     T: Send,
 {
     data: *mut T,
-    event: &'a LolaEvent<T>,
+    event: &'a MockEvent<T>,
 }
 
-unsafe impl<'a, T> Send for LolaBinding<'a, T> where T: Send {}
+unsafe impl<'a, T> Send for MockBinding<'a, T> where T: Send {}
 
 enum SampleBinding<'a, T>
 where
     T: Send,
 {
-    Lola(LolaBinding<'a, T>),
+    Mock(MockBinding<'a, T>),
     Test(Box<T>),
 }
 
@@ -102,13 +102,13 @@ where
 
     fn deref(&self) -> &Self::Target {
         match &self.inner {
-            SampleBinding::Lola(_lola) => unimplemented!(),
+            SampleBinding::Mock(_mock) => unimplemented!(),
             SampleBinding::Test(test) => test.as_ref(),
         }
     }
 }
 
-impl<'a, T> com_api::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
+impl<'a, T> com_api_concept::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
 
 impl<'a, T> PartialEq for Sample<'a, T>
 where
@@ -147,7 +147,7 @@ where
     _lifetime: PhantomData<&'a T>,
 }
 
-impl<'a, T> com_api::SampleMut<T> for SampleMut<'a, T>
+impl<'a, T> com_api_concept::SampleMut<T> for SampleMut<'a, T>
 where
     T: Reloc + Send,
 {
@@ -157,7 +157,7 @@ where
         todo!()
     }
 
-    fn send(self) -> com_api::Result<()> {
+    fn send(self) -> com_api_concept::Result<()> {
         todo!()
     }
 }
@@ -190,7 +190,7 @@ where
     _lifetime: PhantomData<&'a T>,
 }
 
-impl<'a, T> com_api::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
+impl<'a, T> com_api_concept::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
 where
     T: Reloc + Send,
 {
@@ -199,13 +199,6 @@ where
     fn write(self, val: T) -> SampleMut<'a, T> {
         SampleMut {
             data: val,
-            _lifetime: PhantomData,
-        }
-    }
-
-    unsafe fn assume_init(self) -> SampleMut<'a, T> {
-        SampleMut {
-            data: unsafe { self.data.assume_init() },
             _lifetime: PhantomData,
         }
     }
@@ -224,7 +217,7 @@ impl<T> Default for SubscribableImpl<T> {
 impl<T: Reloc + Send> Subscriber<T> for SubscribableImpl<T> {
     type Subscription = SubscriberImpl<T>;
 
-    fn subscribe(self, _max_num_samples: usize) -> com_api::Result<Self::Subscription> {
+    fn subscribe(self, _max_num_samples: usize) -> com_api_concept::Result<Self::Subscription> {
         Ok(SubscriberImpl::new())
     }
 }
@@ -270,7 +263,7 @@ where
         &'a self,
         _scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         _max_samples: usize,
-    ) -> com_api::Result<usize> {
+    ) -> com_api_concept::Result<usize> {
         todo!()
     }
 
@@ -280,7 +273,7 @@ where
         _scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         _new_samples: usize,
         _max_samples: usize,
-    ) -> impl Future<Output = com_api::Result<usize>> + Send {
+    ) -> impl Future<Output = com_api_concept::Result<usize>> + Send {
         async { todo!() }
     }
 }
@@ -306,7 +299,7 @@ where
         Self { _data: PhantomData }
     }
 
-    pub fn allocate<'a>(&'a self) -> com_api::Result<SampleMaybeUninit<'a, T>> {
+    pub fn allocate<'a>(&'a self) -> com_api_concept::Result<SampleMaybeUninit<'a, T>> {
         Ok(SampleMaybeUninit {
             data: MaybeUninit::uninit(),
             _lifetime: PhantomData,
@@ -333,7 +326,7 @@ where
     type ConsumerBuilder = SampleConsumerBuilder<I>;
     type ServiceEnumerator = Vec<SampleConsumerBuilder<I>>;
 
-    fn get_available_instances(&self) -> com_api::Result<Self::ServiceEnumerator> {
+    fn get_available_instances(&self) -> com_api_concept::Result<Self::ServiceEnumerator> {
         Ok(Vec::new())
     }
 }
@@ -378,13 +371,13 @@ impl<I: Interface> ConsumerDescriptor<RuntimeImpl> for SampleConsumerBuilder<I> 
 pub struct RuntimeBuilderImpl {}
 
 impl Builder<RuntimeImpl> for RuntimeBuilderImpl {
-    fn build(self) -> com_api::Result<RuntimeImpl> {
+    fn build(self) -> com_api_concept::Result<RuntimeImpl> {
         Ok(RuntimeImpl {})
     }
 }
 
 /// Entry point for the default implementation for the com module of s-core
-impl com_api::RuntimeBuilder<RuntimeImpl> for RuntimeBuilderImpl {
+impl com_api_concept::RuntimeBuilder<RuntimeImpl> for RuntimeBuilderImpl {
     fn load_config(&mut self, _config: &Path) -> &mut Self {
         self
     }
@@ -405,7 +398,7 @@ impl RuntimeBuilderImpl {
 
 #[cfg(test)]
 mod test {
-    use com_api::{SampleContainer, Subscription};
+    use com_api_concept::{SampleContainer, Subscription};
 
     #[test]
     fn receive_stuff() {

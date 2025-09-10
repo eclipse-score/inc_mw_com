@@ -6,5 +6,5 @@ publish = ["common"]
 license = "Apache-2.0"
 
 [features]
-iceoryx = []
+mock = []
 lola = []

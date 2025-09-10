@@ -6,9 +6,9 @@ publish = ["common"]
 license = "Apache-2.0"
 
 [features]
-iceoryx = ["com-api-gen-iceoryx"]
+mock = ["com-api-gen-mock"]
 lola = ["com-api-gen-lola"]
 
 [dependencies]
-com-api-gen-iceoryx = { path = "com-api-gen-iceoryx", optional = true  }
+com-api-gen-mock = { path = "com-api-gen-mock", optional = true  }
 com-api-gen-lola = { path = "com-api-gen-lola", optional = true  }

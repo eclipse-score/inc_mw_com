@@ -43,8 +43,8 @@ name = "com-api"
 version = "0.1.0"
 dependencies = [
  "com-api-concept",
- "com-api-runtime-iceoryx",
  "com-api-runtime-lola",
+ "com-api-runtime-mock",
 ]
 
 [[package]]
@@ -64,16 +64,8 @@ dependencies = [
 name = "com-api-gen"
 version = "0.1.0"
 dependencies = [
- "com-api-gen-iceoryx",
  "com-api-gen-lola",
-]
-
-[[package]]
-name = "com-api-gen-iceoryx"
-version = "0.1.0"
-dependencies = [
- "com-api",
- "com-api-runtime-iceoryx",
+ "com-api-gen-mock",
 ]
 
 [[package]]
@@ -85,7 +77,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "com-api-runtime-iceoryx"
+name = "com-api-gen-mock"
+version = "0.1.0"
+dependencies = [
+ "com-api",
+ "com-api-runtime-mock",
+]
+
+[[package]]
+name = "com-api-runtime-lola"
 version = "0.1.0"
 dependencies = [
  "com-api-concept",
@@ -93,7 +93,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "com-api-runtime-lola"
+name = "com-api-runtime-mock"
 version = "0.1.0"
 dependencies = [
  "com-api-concept",

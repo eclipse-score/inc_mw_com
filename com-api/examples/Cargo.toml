@@ -6,7 +6,7 @@ publish = ["common"]
 license = "Apache-2.0"
 
 [features]
-iceoryx = ["com-api/iceoryx", "com-api-gen/iceoryx"]
+mock = ["com-api/mock", "com-api-gen/mock"]
 lola = ["com-api/lola", "com-api-gen/lola"]
 
 [dependencies]

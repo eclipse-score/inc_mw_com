@@ -5,9 +5,9 @@ Incubation repository for interprocess communication framework
 
 Examples can be built from examples directory by passing desired IPC adapter as feature.
 
-For Iceoryx2 build:
+For mock build:
 ```
-inc_mw_com/com-api$ cargo run --example basic-consumer-producer --features "iceoryx"
+inc_mw_com/com-api$ cargo run --example basic-consumer-producer --features "mock"
 ```
 
 For LoLa build:

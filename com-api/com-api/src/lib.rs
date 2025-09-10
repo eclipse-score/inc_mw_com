@@ -9,11 +9,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(not(any(feature = "iceoryx", feature = "lola")))]
-compile_error!("You must enable at least one feature: `iceoryx` or `lola`!");
+#[cfg(not(any(feature = "mock", feature = "lola")))]
+compile_error!("You must enable at least one feature: `mock` or `lola`!");
 
-#[cfg(feature = "iceoryx")]
-pub use com_api_runtime_iceoryx::RuntimeBuilderImpl;
+#[cfg(feature = "mock")]
+pub use com_api_runtime_mock::RuntimeBuilderImpl;
 #[cfg(feature = "lola")]
 pub use com_api_runtime_lola::RuntimeBuilderImpl;
 

@@ -6,10 +6,10 @@ publish = ["common"]
 license = "Apache-2.0"
 
 [features]
-iceoryx = ["com-api-runtime-iceoryx", "com-api-concept/iceoryx"]
+mock = ["com-api-runtime-mock", "com-api-concept/mock"]
 lola = ["com-api-runtime-lola", "com-api-concept/lola"]
 
 [dependencies]
 com-api-concept = { workspace = true }
-com-api-runtime-iceoryx = { workspace = true, optional = true  }
+com-api-runtime-mock = { workspace = true, optional = true  }
 com-api-runtime-lola = { workspace = true, optional = true  }

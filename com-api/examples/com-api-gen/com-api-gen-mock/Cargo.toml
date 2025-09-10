@@ -1,13 +1,13 @@
 [package]
-name = "com-api-gen-iceoryx"
+name = "com-api-gen-mock"
 version = "0.1.0"
 edition = "2024"
 publish = ["common"]
 license = "Apache-2.0"
 
 [features]
-iceoryx = ["com-api/iceoryx"]
+mock = ["com-api/mock"]
 
 [dependencies]
-com-api-runtime-iceoryx = { workspace = true }
+com-api-runtime-mock = { workspace = true }
 com-api = { workspace = true }
