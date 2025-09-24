@@ -9,6 +9,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+//! This crate provides a LoLa implementation of the COM API for testing purposes.
+//! It is meant to be used in conjunction with the `com-api` crate.
+
 #![allow(dead_code)]
 
 use std::cmp::Ordering;
@@ -199,6 +202,13 @@ where
     fn write(self, val: T) -> SampleMut<'a, T> {
         SampleMut {
             data: val,
+            _lifetime: PhantomData,
+        }
+    }
+
+    unsafe fn assume_init(self) -> SampleMut<'a, T> { 
+        SampleMut {
+            data: unsafe { self.data.assume_init() },
             _lifetime: PhantomData,
         }
     }

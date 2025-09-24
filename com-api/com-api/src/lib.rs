@@ -9,6 +9,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+//! This crate provides the COM API, which is a common interface for different implementations
+//! of the COM API, e.g., for different IPC backends.
+//! The actual implementations are provided by the `com-api-runtime-mock` and `com-api-runtime-lola` crates.
+//! The user must enable one of these features to use the COM API.
+
+
 #[cfg(not(any(feature = "mock", feature = "lola")))]
 compile_error!("You must enable at least one feature: `mock` or `lola`!");
 

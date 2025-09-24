@@ -9,6 +9,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+//! This crate defines the concepts and traits of the COM API. It does not provide any concrete
+//! implementations. It is meant to be used as a common interface for different implementations
+//! of the COM API, e.g., for different IPC backends.
+//! 
 //! # API Design principles
 //!
 //! - We stick to the builder pattern down to a single service (TODO: Should this be introduced to the C++ API?)
@@ -131,7 +135,6 @@ where
 
 /// A `SampleMaybeUninit` provides a reference to a memory buffer of an event with a `MaybeUninit` value.
 ///
-/// Utilizing `DerefMut` on the buffer reveals a reference to the internal `MaybeUninit<T>`.
 /// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns a `SampleMut`.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
 ///
@@ -152,7 +155,7 @@ where
     /// # Safety
     ///
     /// The caller has to make sure to initialize the data in the buffer before calling this method.
-    //unsafe fn assume_init(self) -> Self::SampleMut;
+    unsafe fn assume_init(self) -> Self::SampleMut;
     /// Write a value into the buffer and render it initialized.
     ///
     /// This corresponds to `MaybeUninit::write`.

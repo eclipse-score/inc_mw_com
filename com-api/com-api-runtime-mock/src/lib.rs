@@ -9,6 +9,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+//! This crate provides a mock implementation of the COM API for testing purposes.
+//! It is meant to be used in conjunction with the `com-api` crate.
+//! The mock implementation does not perform any real IPC and is not meant to be used in production.
+//! It is only meant to be used for testing and development.
+
 #![allow(dead_code)]
 
 use std::cmp::Ordering;
@@ -199,6 +204,13 @@ where
     fn write(self, val: T) -> SampleMut<'a, T> {
         SampleMut {
             data: val,
+            _lifetime: PhantomData,
+        }
+    }
+
+    unsafe fn assume_init(self) -> SampleMut<'a, T> { 
+        SampleMut {
+            data: unsafe { self.data.assume_init() },
             _lifetime: PhantomData,
         }
     }

@@ -6,8 +6,8 @@ publish = ["common"]
 license = "Apache-2.0"
 
 [features]
-mock = ["com-api-runtime-mock", "com-api-concept/mock"]
-lola = ["com-api-runtime-lola", "com-api-concept/lola"]
+mock = ["com-api-runtime-mock"]
+lola = ["com-api-runtime-lola"]
 
 [dependencies]
 com-api-concept = { workspace = true }
