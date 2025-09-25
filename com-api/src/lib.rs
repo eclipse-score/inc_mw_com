@@ -125,14 +125,12 @@ where
     fn send(self) -> Result<()>;
 }
 
-/// A `SampleMaybeUninit` provides a reference to a memory buffer of an event with a `MaybeUninit` value.
+/// A `SampleMaybeUninit` provides a reference to a memory buffer of an event whose data hasn't been
+/// initialized yet.
 ///
-/// Utilizing `DerefMut` on the buffer reveals a reference to the internal `MaybeUninit<T>`.
-/// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns a `SampleMut`.
+/// The buffer can be assumed initialized with mutable access by calling `assume_init` which returns
+/// a `SampleMut`.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-///
-/// TODO: Shall we also require DerefMut<Target=MaybeUninit<T>> from implementing types? How to deal
-/// TODO: with the ambiguous assume_init() then?
 pub trait SampleMaybeUninit<T>
 where
     T: Send + Reloc,
@@ -145,11 +143,15 @@ where
     /// This corresponds to `MaybeUninit::write`.
     fn write(self, value: T) -> Self::SampleMut;
 
+    /// Get a mutable pointer to the internal maybe uninitialized `T`.
+    ///
+    /// The caller has to make sure to initialize the data in the buffer.
+    /// Reading from the received pointer before initialization is undefined behavior.
+    fn as_mut_ptr(&mut self) -> *mut T;
+
     /// Render the buffer initialized for mutable access.
     ///
     /// This corresponds to `MaybeUninit::assume_init`.
-    ///
-    /// TODO: Collision with MaybeUninit::assume_init() needs to be resolved.
     ///
     /// # Safety
     ///
@@ -159,6 +161,7 @@ where
 
 pub trait Interface {}
 
+#[must_use = "if a service is offered it will be unoffered and dropped immediately, causing unexpected behavior in the system"]
 pub trait OfferedProducer {
     type Interface: Interface;
     type Producer: Producer<Interface = Self::Interface>;
@@ -171,6 +174,23 @@ pub trait Producer {
     type OfferedProducer: OfferedProducer<Interface = Self::Interface>;
 
     fn offer(self) -> Result<Self::OfferedProducer>;
+}
+
+pub trait Publisher<T>
+where
+    T: Reloc + Send,
+{
+    type SampleMaybeUninit<'a>: SampleMaybeUninit<T> + 'a
+    where
+        Self: 'a;
+
+    fn allocate<'a>(&'a self) -> Result<Self::SampleMaybeUninit<'a>>;
+
+    fn send(&self, value: T) -> Result<()> {
+        let sample = self.allocate()?;
+        let init_sample = sample.write(value);
+        init_sample.send()
+    }
 }
 
 pub trait Consumer {}
