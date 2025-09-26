@@ -16,8 +16,8 @@ fn main() {
 #[cfg(test)]
 mod test {
     use com_api::{
-        Builder, ConsumerDescriptor, InstanceSpecifier, Producer, SampleContainer,
-        SampleMaybeUninit, SampleMut, ServiceDiscovery, Subscriber, Subscription,
+        Builder, ConsumerDescriptor, InstanceSpecifier, OfferedProducer, Producer, Publisher,
+        SampleContainer, SampleMaybeUninit, SampleMut, ServiceDiscovery, Subscriber, Subscription,
     };
     use com_api_sample_gen::{Tire, VehicleInterface};
 
@@ -34,6 +34,8 @@ mod test {
         let uninit_sample = offered_producer.left_tire.allocate().unwrap();
         let sample = uninit_sample.write(Tire {});
         sample.send().unwrap();
+
+        offered_producer.unoffer();
     }
 
     #[test]
