@@ -73,7 +73,53 @@ where
     fn load_config(&mut self, config: &Path) -> &mut Self;
 }
 
-pub struct InstanceSpecifier {}
+/// Technology independent description of a service instance "location"
+///
+/// The string shall describe where to find a certain instance of a service. Each level shall look
+/// like this
+/// <InterfaceName>:my/path/to/service_name
+pub struct InstanceSpecifier {
+    inner: Option<String>,
+}
+
+impl InstanceSpecifier {
+    /// Instance specifier that will match any instance. This can be used to find all
+    /// instances of a certain interface during service discovery.
+    pub const MATCH_ANY: Self = InstanceSpecifier { inner: None };
+
+    fn check_str(_service_name: &str) -> bool {
+        todo!()
+    }
+
+    /// Create a new instance specifier, using the string-like input as the path to the
+    /// instance.
+    ///
+    /// The returned instance specifier will only match if the instance exactly matches the given
+    /// string.
+    pub fn new(service_name: impl AsRef<str>) -> Result<InstanceSpecifier> {
+        let service_name = service_name.as_ref();
+        if Self::check_str(service_name) {
+            Ok(Self {
+                inner: Some(service_name.to_string()),
+            })
+        } else {
+            Err(Error::Fail)
+        }
+    }
+}
+
+impl TryFrom<&str> for InstanceSpecifier {
+    type Error = Error;
+    fn try_from(s: &str) -> Result<Self> {
+        Self::new(s)
+    }
+}
+
+impl AsRef<str> for InstanceSpecifier {
+    fn as_ref(&self) -> &str {
+        self.inner.as_ref().map(String::as_str).unwrap_or("[ANY]")
+    }
+}
 
 /// This trait shall ensure that we can safely use an instance of the implementing type across
 /// address boundaries. This property may be violated by the following circumstances:
