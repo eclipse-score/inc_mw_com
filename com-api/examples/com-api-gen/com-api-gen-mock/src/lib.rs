@@ -23,7 +23,7 @@
 //! ```
 
 use com_api::*;
-use com_api_runtime_mock::{RuntimeImpl, SampleConsumerBuilder, SampleProducerBuilder};
+use com_api_runtime_mock::{MockRuntimeImpl, SampleConsumerBuilder, SampleProducerBuilder};
 
 #[derive(Debug)]
 pub struct Tire {}
@@ -72,7 +72,7 @@ impl Builder<VehicleProducer> for SampleProducerBuilder<VehicleInterface> {
     }
 }
 
-impl ProducerBuilder<VehicleInterface, RuntimeImpl, VehicleProducer>
+impl ProducerBuilder<VehicleInterface, MockRuntimeImpl, VehicleProducer>
     for SampleProducerBuilder<VehicleInterface>
 {
 }
@@ -84,7 +84,7 @@ pub struct VehicleConsumer {
 
 impl Consumer for VehicleConsumer {}
 
-impl ConsumerBuilder<VehicleInterface, RuntimeImpl> for SampleConsumerBuilder<VehicleInterface> {}
+impl ConsumerBuilder<VehicleInterface, MockRuntimeImpl> for SampleConsumerBuilder<VehicleInterface> {}
 
 impl Builder<VehicleConsumer> for SampleConsumerBuilder<VehicleInterface> {
     fn build(self) -> com_api::Result<VehicleConsumer> {

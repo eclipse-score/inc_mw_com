@@ -27,13 +27,13 @@ use com_api_concept::{
     SampleContainer, ServiceDiscovery, Subscriber, Subscription,
 };
 
-pub struct RuntimeImpl {}
+pub struct LolaRuntimeImpl {}
 
-impl Runtime for RuntimeImpl {
+impl Runtime for LolaRuntimeImpl {
     type Sample<'a, T: Reloc + Send + 'a + std::fmt::Debug> = Sample<'a, T>;
 }
 
-impl RuntimeImpl {
+impl LolaRuntimeImpl {
     // TODO: Any chance that these can be moved to a trait so that this becomes more testable?
     // If yes, this trait is certainly located here since
     pub fn find_service<I: Interface>(
@@ -322,16 +322,16 @@ pub struct SampleConsumerDiscovery<I> {
 }
 
 impl<I> SampleConsumerDiscovery<I> {
-    fn new(_runtime: &RuntimeImpl, _instance_specifier: InstanceSpecifier) -> Self {
+    fn new(_runtime: &LolaRuntimeImpl, _instance_specifier: InstanceSpecifier) -> Self {
         Self {
             _interface: PhantomData,
         }
     }
 }
 
-impl<I: Interface> ServiceDiscovery<I, RuntimeImpl> for SampleConsumerDiscovery<I>
+impl<I: Interface> ServiceDiscovery<I, LolaRuntimeImpl> for SampleConsumerDiscovery<I>
 where
-    SampleConsumerBuilder<I>: ConsumerBuilder<I, RuntimeImpl>,
+    SampleConsumerBuilder<I>: ConsumerBuilder<I, LolaRuntimeImpl>,
 {
     type ConsumerBuilder = SampleConsumerBuilder<I>;
     type ServiceEnumerator = Vec<SampleConsumerBuilder<I>>;
@@ -347,7 +347,7 @@ pub struct SampleProducerBuilder<I: Interface> {
 }
 
 impl<I: Interface> SampleProducerBuilder<I> {
-    fn new(_runtime: &RuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
+    fn new(_runtime: &LolaRuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
         Self {
             instance_specifier,
             _interface: PhantomData,
@@ -372,7 +372,7 @@ pub struct SampleConsumerBuilder<I: Interface> {
     _interface: PhantomData<I>,
 }
 
-impl<I: Interface> ConsumerDescriptor<RuntimeImpl> for SampleConsumerBuilder<I> {
+impl<I: Interface> ConsumerDescriptor<LolaRuntimeImpl> for SampleConsumerBuilder<I> {
     fn get_instance_id(&self) -> usize {
         todo!()
     }
@@ -380,14 +380,14 @@ impl<I: Interface> ConsumerDescriptor<RuntimeImpl> for SampleConsumerBuilder<I> 
 
 pub struct RuntimeBuilderImpl {}
 
-impl Builder<RuntimeImpl> for RuntimeBuilderImpl {
-    fn build(self) -> com_api_concept::Result<RuntimeImpl> {
-        Ok(RuntimeImpl {})
+impl Builder<LolaRuntimeImpl> for RuntimeBuilderImpl {
+    fn build(self) -> com_api_concept::Result<LolaRuntimeImpl> {
+        Ok(LolaRuntimeImpl {})
     }
 }
 
 /// Entry point for the default implementation for the com module of s-core
-impl com_api_concept::RuntimeBuilder<RuntimeImpl> for RuntimeBuilderImpl {
+impl com_api_concept::RuntimeBuilder<LolaRuntimeImpl> for RuntimeBuilderImpl {
     fn load_config(&mut self, _config: &Path) -> &mut Self {
         self
     }

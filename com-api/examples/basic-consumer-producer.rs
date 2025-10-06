@@ -14,7 +14,7 @@ use com_api_gen::*;
 
 fn main() {
     let runtime_builder = RuntimeBuilderImpl::new();
-    let runtime = runtime_builder.build().unwrap();
+    let runtime = Builder::<MockRuntimeImpl>::build(runtime_builder).unwrap();
     let producer_builder = runtime.producer_builder::<VehicleInterface>(InstanceSpecifier {
         specifier: "My/Funk/ServiceName".to_string(),
     });

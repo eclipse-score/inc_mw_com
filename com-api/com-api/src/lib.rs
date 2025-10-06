@@ -20,8 +20,12 @@ compile_error!("You must enable at least one feature: `mock` or `lola`!");
 
 #[cfg(feature = "mock")]
 pub use com_api_runtime_mock::RuntimeBuilderImpl;
+#[cfg(feature = "mock")]
+pub use com_api_runtime_mock::MockRuntimeImpl;
 #[cfg(feature = "lola")]
 pub use com_api_runtime_lola::RuntimeBuilderImpl;
+#[cfg(feature = "lola")]
+pub use com_api_runtime_lola::LolaRuntimeImpl;
 
 pub use com_api_concept::{
     Builder, Consumer, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface,
