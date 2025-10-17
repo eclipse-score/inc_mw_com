@@ -22,12 +22,8 @@
 //!
 //! ```
 
-use com_api::{
-    Builder, Consumer, ConsumerBuilder, Interface, OfferedProducer, Producer, ProducerBuilder,
-    Reloc,
-};
-use com_api_sample_runtime::RuntimeImpl;
-use com_api_sample_runtime::{SampleConsumerBuilder, SampleProducerBuilder};
+use com_api::*;
+use com_api_runtime_lola::{LolaRuntimeImpl, SampleConsumerBuilder, SampleProducerBuilder};
 
 #[derive(Debug)]
 pub struct Tire {}
@@ -57,8 +53,8 @@ impl Producer for VehicleProducer {
 }
 
 pub struct VehicleOfferedProducer {
-    pub left_tire: com_api_sample_runtime::Publisher<Tire>,
-    pub exhaust: com_api_sample_runtime::Publisher<Exhaust>,
+    pub left_tire: com_api_runtime_lola::Publisher<Tire>,
+    pub exhaust: com_api_runtime_lola::Publisher<Exhaust>,
 }
 
 impl OfferedProducer for VehicleOfferedProducer {
@@ -76,19 +72,19 @@ impl Builder<VehicleProducer> for SampleProducerBuilder<VehicleInterface> {
     }
 }
 
-impl ProducerBuilder<VehicleInterface, RuntimeImpl, VehicleProducer>
+impl ProducerBuilder<VehicleInterface, LolaRuntimeImpl, VehicleProducer>
     for SampleProducerBuilder<VehicleInterface>
 {
 }
 
 pub struct VehicleConsumer {
-    pub left_tire: com_api_sample_runtime::SubscribableImpl<Tire>,
-    pub exhaust: com_api_sample_runtime::SubscribableImpl<Exhaust>,
+    pub left_tire: com_api_runtime_lola::SubscribableImpl<Tire>,
+    pub exhaust: com_api_runtime_lola::SubscribableImpl<Exhaust>,
 }
 
 impl Consumer for VehicleConsumer {}
 
-impl ConsumerBuilder<VehicleInterface, RuntimeImpl> for SampleConsumerBuilder<VehicleInterface> {}
+impl ConsumerBuilder<VehicleInterface, LolaRuntimeImpl> for SampleConsumerBuilder<VehicleInterface> {}
 
 impl Builder<VehicleConsumer> for SampleConsumerBuilder<VehicleInterface> {
     fn build(self) -> com_api::Result<VehicleConsumer> {

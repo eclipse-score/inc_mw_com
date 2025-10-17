@@ -9,6 +9,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+//! This crate provides a LoLa implementation of the COM API for testing purposes.
+//! It is meant to be used in conjunction with the `com-api` crate.
+
 #![allow(dead_code)]
 
 use std::cmp::Ordering;
@@ -19,18 +22,18 @@ use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
-use com_api::{
+use com_api_concept::{
     Builder, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, Reloc, Runtime,
     SampleContainer, ServiceDiscovery, Subscriber, Subscription,
 };
 
-pub struct RuntimeImpl {}
+pub struct LolaRuntimeImpl {}
 
-impl Runtime for RuntimeImpl {
-    type Sample<'a, T: Reloc + Send + 'a> = Sample<'a, T>;
+impl Runtime for LolaRuntimeImpl {
+    type Sample<'a, T: Reloc + Send + 'a + std::fmt::Debug> = Sample<'a, T>;
 }
 
-impl RuntimeImpl {
+impl LolaRuntimeImpl {
     // TODO: Any chance that these can be moved to a trait so that this becomes more testable?
     // If yes, this trait is certainly located here since
     pub fn find_service<I: Interface>(
@@ -108,7 +111,7 @@ where
     }
 }
 
-impl<'a, T> com_api::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
+impl<'a, T> com_api_concept::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
 
 impl<'a, T> PartialEq for Sample<'a, T>
 where
@@ -147,7 +150,7 @@ where
     _lifetime: PhantomData<&'a T>,
 }
 
-impl<'a, T> com_api::SampleMut<T> for SampleMut<'a, T>
+impl<'a, T> com_api_concept::SampleMut<T> for SampleMut<'a, T>
 where
     T: Reloc + Send,
 {
@@ -157,7 +160,7 @@ where
         todo!()
     }
 
-    fn send(self) -> com_api::Result<()> {
+    fn send(self) -> com_api_concept::Result<()> {
         todo!()
     }
 }
@@ -190,7 +193,7 @@ where
     _lifetime: PhantomData<&'a T>,
 }
 
-impl<'a, T> com_api::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
+impl<'a, T> com_api_concept::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
 where
     T: Reloc + Send,
 {
@@ -203,7 +206,7 @@ where
         }
     }
 
-    unsafe fn assume_init(self) -> SampleMut<'a, T> {
+    unsafe fn assume_init(self) -> SampleMut<'a, T> { 
         SampleMut {
             data: unsafe { self.data.assume_init() },
             _lifetime: PhantomData,
@@ -224,7 +227,7 @@ impl<T> Default for SubscribableImpl<T> {
 impl<T: Reloc + Send> Subscriber<T> for SubscribableImpl<T> {
     type Subscription = SubscriberImpl<T>;
 
-    fn subscribe(self, _max_num_samples: usize) -> com_api::Result<Self::Subscription> {
+    fn subscribe(self, _max_num_samples: usize) -> com_api_concept::Result<Self::Subscription> {
         Ok(SubscriberImpl::new())
     }
 }
@@ -270,7 +273,7 @@ where
         &'a self,
         _scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         _max_samples: usize,
-    ) -> com_api::Result<usize> {
+    ) -> com_api_concept::Result<usize> {
         todo!()
     }
 
@@ -280,7 +283,7 @@ where
         _scratch: &'_ mut SampleContainer<Self::Sample<'a>>,
         _new_samples: usize,
         _max_samples: usize,
-    ) -> impl Future<Output = com_api::Result<usize>> + Send {
+    ) -> impl Future<Output = com_api_concept::Result<usize>> + Send {
         async { todo!() }
     }
 }
@@ -306,7 +309,7 @@ where
         Self { _data: PhantomData }
     }
 
-    pub fn allocate<'a>(&'a self) -> com_api::Result<SampleMaybeUninit<'a, T>> {
+    pub fn allocate<'a>(&'a self) -> com_api_concept::Result<SampleMaybeUninit<'a, T>> {
         Ok(SampleMaybeUninit {
             data: MaybeUninit::uninit(),
             _lifetime: PhantomData,
@@ -319,21 +322,21 @@ pub struct SampleConsumerDiscovery<I> {
 }
 
 impl<I> SampleConsumerDiscovery<I> {
-    fn new(_runtime: &RuntimeImpl, _instance_specifier: InstanceSpecifier) -> Self {
+    fn new(_runtime: &LolaRuntimeImpl, _instance_specifier: InstanceSpecifier) -> Self {
         Self {
             _interface: PhantomData,
         }
     }
 }
 
-impl<I: Interface> ServiceDiscovery<I, RuntimeImpl> for SampleConsumerDiscovery<I>
+impl<I: Interface> ServiceDiscovery<I, LolaRuntimeImpl> for SampleConsumerDiscovery<I>
 where
-    SampleConsumerBuilder<I>: ConsumerBuilder<I, RuntimeImpl>,
+    SampleConsumerBuilder<I>: ConsumerBuilder<I, LolaRuntimeImpl>,
 {
     type ConsumerBuilder = SampleConsumerBuilder<I>;
     type ServiceEnumerator = Vec<SampleConsumerBuilder<I>>;
 
-    fn get_available_instances(&self) -> com_api::Result<Self::ServiceEnumerator> {
+    fn get_available_instances(&self) -> com_api_concept::Result<Self::ServiceEnumerator> {
         Ok(Vec::new())
     }
 }
@@ -344,7 +347,7 @@ pub struct SampleProducerBuilder<I: Interface> {
 }
 
 impl<I: Interface> SampleProducerBuilder<I> {
-    fn new(_runtime: &RuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
+    fn new(_runtime: &LolaRuntimeImpl, instance_specifier: InstanceSpecifier) -> Self {
         Self {
             instance_specifier,
             _interface: PhantomData,
@@ -369,7 +372,7 @@ pub struct SampleConsumerBuilder<I: Interface> {
     _interface: PhantomData<I>,
 }
 
-impl<I: Interface> ConsumerDescriptor<RuntimeImpl> for SampleConsumerBuilder<I> {
+impl<I: Interface> ConsumerDescriptor<LolaRuntimeImpl> for SampleConsumerBuilder<I> {
     fn get_instance_id(&self) -> usize {
         todo!()
     }
@@ -377,14 +380,14 @@ impl<I: Interface> ConsumerDescriptor<RuntimeImpl> for SampleConsumerBuilder<I> 
 
 pub struct RuntimeBuilderImpl {}
 
-impl Builder<RuntimeImpl> for RuntimeBuilderImpl {
-    fn build(self) -> com_api::Result<RuntimeImpl> {
-        Ok(RuntimeImpl {})
+impl Builder<LolaRuntimeImpl> for RuntimeBuilderImpl {
+    fn build(self) -> com_api_concept::Result<LolaRuntimeImpl> {
+        Ok(LolaRuntimeImpl {})
     }
 }
 
 /// Entry point for the default implementation for the com module of s-core
-impl com_api::RuntimeBuilder<RuntimeImpl> for RuntimeBuilderImpl {
+impl com_api_concept::RuntimeBuilder<LolaRuntimeImpl> for RuntimeBuilderImpl {
     fn load_config(&mut self, _config: &Path) -> &mut Self {
         self
     }
@@ -405,7 +408,7 @@ impl RuntimeBuilderImpl {
 
 #[cfg(test)]
 mod test {
-    use com_api::{SampleContainer, Subscription};
+    use com_api_concept::{SampleContainer, Subscription};
 
     #[test]
     fn receive_stuff() {
