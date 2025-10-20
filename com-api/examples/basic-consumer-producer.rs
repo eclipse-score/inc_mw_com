@@ -13,8 +13,14 @@ use com_api::*;
 use com_api_gen::*;
 
 fn main() {
-    let runtime_builder = RuntimeBuilderImpl::new();
-    let runtime = Builder::<MockRuntimeImpl>::build(runtime_builder).unwrap();
+    #[cfg(feature = "mock")]
+    let runtime_builder = MockAdapterBuilder::new();
+    #[cfg(feature = "mock")]
+    let runtime = BuilderConcept::<MockAdapter>::build(runtime_builder).unwrap();
+    #[cfg(feature = "lola")]
+    let runtime_builder = LolaAdapterBuilder::new();
+    #[cfg(feature = "lola")]
+    let runtime = BuilderConcept::<LolaAdapter>::build(runtime_builder).unwrap();
     let producer_builder = runtime.producer_builder::<VehicleInterface>(InstanceSpecifier {
         specifier: "My/Funk/ServiceName".to_string(),
     });
@@ -66,7 +72,7 @@ mod test {
     #[test]
     fn create_producer() {
         // Factory
-        let runtime_builder = RuntimeBuilderImpl::new();
+        let runtime_builder = AdapterBuilder::new();
         let runtime = runtime_builder.build().unwrap();
         let producer_builder = runtime.producer_builder::<VehicleInterface>(InstanceSpecifier {
             specifier: "My/Funk/ServiceName".to_string(),
@@ -83,7 +89,7 @@ mod test {
     #[test]
     fn create_consumer() {
         // Create runtime
-        let runtime_builder = RuntimeBuilderImpl::new();
+        let runtime_builder = AdapterBuilder::new();
         let runtime = runtime_builder.build().unwrap();
 
         // Create service discovery
@@ -116,7 +122,7 @@ mod test {
         }
     }
 
-    async fn async_data_processor_fn(subscribed: impl Subscription<Tire>) {
+    async fn async_data_processor_fn(subscribed: impl SubscriptionConcept<Tire>) {
         let mut buffer = SampleContainer::new();
         for _ in 0..10 {
             match subscribed.receive(&mut buffer, 1, 1).await {
@@ -135,7 +141,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn schedule_subscription_on_mt_scheduler() {
-        let runtime_builder = RuntimeBuilderImpl::new();
+        let runtime_builder = AdapterBuilder::new();
         let runtime = runtime_builder.build().unwrap();
 
         let consumer_discovery = runtime.find_service::<VehicleInterface>(InstanceSpecifier {

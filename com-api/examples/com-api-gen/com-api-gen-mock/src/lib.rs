@@ -23,7 +23,9 @@
 //! ```
 
 use com_api::*;
-use com_api_runtime_mock::{MockRuntimeImpl, SampleConsumerBuilder, SampleProducerBuilder};
+use com_api_runtime_mock::{
+    MockAdapter, MockConsumerBuilder, MockProducerBuilder, MockPublisher, MockSubscribable,
+};
 
 #[derive(Debug)]
 pub struct Tire {}
@@ -35,15 +37,15 @@ unsafe impl Reloc for Exhaust {}
 pub struct VehicleInterface {}
 
 /// Generic
-impl Interface for VehicleInterface {}
+impl InterfaceConcept for VehicleInterface {}
 
 pub struct AnotherInterface {}
 
-impl Interface for AnotherInterface {}
+impl InterfaceConcept for AnotherInterface {}
 
 pub struct VehicleProducer {}
 
-impl Producer for VehicleProducer {
+impl ProducerConcept for VehicleProducer {
     type Interface = VehicleInterface;
     type OfferedProducer = VehicleOfferedProducer;
 
@@ -53,11 +55,11 @@ impl Producer for VehicleProducer {
 }
 
 pub struct VehicleOfferedProducer {
-    pub left_tire: com_api_runtime_mock::Publisher<Tire>,
-    pub exhaust: com_api_runtime_mock::Publisher<Exhaust>,
+    pub left_tire: MockPublisher<Tire>,
+    pub exhaust: MockPublisher<Exhaust>,
 }
 
-impl OfferedProducer for VehicleOfferedProducer {
+impl OfferedProducerConcept for VehicleOfferedProducer {
     type Interface = VehicleInterface;
     type Producer = VehicleProducer;
 
@@ -66,27 +68,30 @@ impl OfferedProducer for VehicleOfferedProducer {
     }
 }
 
-impl Builder<VehicleProducer> for SampleProducerBuilder<VehicleInterface> {
+impl BuilderConcept<VehicleProducer> for MockProducerBuilder<VehicleInterface> {
     fn build(self) -> com_api::Result<VehicleProducer> {
         todo!()
     }
 }
 
-impl ProducerBuilder<VehicleInterface, MockRuntimeImpl, VehicleProducer>
-    for SampleProducerBuilder<VehicleInterface>
+impl ProducerBuilderConcept<VehicleInterface, MockAdapter, VehicleProducer>
+    for MockProducerBuilder<VehicleInterface>
 {
 }
 
 pub struct VehicleConsumer {
-    pub left_tire: com_api_runtime_mock::SubscribableImpl<Tire>,
-    pub exhaust: com_api_runtime_mock::SubscribableImpl<Exhaust>,
+    pub left_tire: MockSubscribable<Tire>,
+    pub exhaust: MockSubscribable<Exhaust>,
 }
 
-impl Consumer for VehicleConsumer {}
+impl ConsumerConcept for VehicleConsumer {}
 
-impl ConsumerBuilder<VehicleInterface, MockRuntimeImpl> for SampleConsumerBuilder<VehicleInterface> {}
+impl ConsumerBuilderConcept<VehicleInterface, MockAdapter>
+    for MockConsumerBuilder<VehicleInterface>
+{
+}
 
-impl Builder<VehicleConsumer> for SampleConsumerBuilder<VehicleInterface> {
+impl BuilderConcept<VehicleConsumer> for MockConsumerBuilder<VehicleInterface> {
     fn build(self) -> com_api::Result<VehicleConsumer> {
         todo!()
     }
