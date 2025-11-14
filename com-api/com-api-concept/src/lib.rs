@@ -12,7 +12,7 @@
 //! This crate defines the concepts and traits of the COM API. It does not provide any concrete
 //! implementations. It is meant to be used as a common interface for different implementations
 //! of the COM API, e.g., for different IPC backends.
-//! 
+//!
 //! # API Design principles
 //!
 //! - We stick to the builder pattern down to a single service (TODO: Should this be introduced to the C++ API?)
@@ -46,6 +46,7 @@
 
 use std::collections::VecDeque;
 use std::fmt::Debug;
+use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
@@ -68,8 +69,27 @@ pub trait Builder<Output> {
 
 /// This represents the com implementation and acts as a root for all types and objects provided by
 /// the implementation.
+//
+// Associated types:
+// * ProviderInfo - Information about a producer instance required to pass to different traits/types/methods
+// * ConsumerInfo - Information about a consumer instance required to pass to different traits/types/methods
 pub trait Runtime {
-    type Sample<'a, T: Reloc + Send + std::fmt::Debug + 'a>: Sample<T>;
+    type ServiceDiscovery<I: Interface>: ServiceDiscovery<I, Self>;
+    type Subscriber<T: Reloc + Send>: Subscriber<T, Self>;
+    type ProducerBuilder<I: Interface, P: Producer<Self, Interface = I>>: ProducerBuilder<I, P, Self>;
+    type Publisher<T: Reloc + Send>: Publisher<T>;
+    type ProviderInfo: Send + Clone;
+    type ConsumerInfo: Send + Clone;
+
+    fn find_service<I: Interface>(
+        &self,
+        _instance_specifier: InstanceSpecifier,
+    ) -> Self::ServiceDiscovery<I>;
+
+    fn producer_builder<I: Interface, P: Producer<Self, Interface = I>>(
+        &self,
+        instance_specifier: InstanceSpecifier,
+    ) -> Self::ProducerBuilder<I, P>;
 }
 
 pub trait RuntimeBuilder<B>: Builder<B>
@@ -79,8 +99,58 @@ where
     fn load_config(&mut self, config: &Path) -> &mut Self;
 }
 
+/// Technology independent description of a service instance "location"
+///
+/// The string shall describe where to find a certain instance of a service. Each level shall look
+/// like this
+/// <InterfaceName>:my/path/to/service_name
+#[derive(Clone)]
 pub struct InstanceSpecifier {
-    pub specifier: String,
+    specifier: Option<String>,
+}
+
+impl InstanceSpecifier {
+    /// Instance specifier that will match any instance. This can be used to find all
+    /// instances of a certain interface during service discovery.
+    pub const MATCH_ANY: Self = InstanceSpecifier { specifier: None };
+
+    fn check_str(_service_name: &str) -> bool {
+        // For now, accept any non-empty string as a valid service name
+        // In a real implementation, this might validate the format
+        true
+    }
+
+    /// Create a new instance specifier, using the string-like input as the path to the
+    /// instance.
+    ///
+    /// The returned instance specifier will only match if the instance exactly matches the given
+    /// string.
+    pub fn new(service_name: impl AsRef<str>) -> Result<InstanceSpecifier> {
+        let service_name = service_name.as_ref();
+        if Self::check_str(service_name) {
+            Ok(Self {
+                specifier: Some(service_name.to_string()),
+            })
+        } else {
+            Err(Error::Fail)
+        }
+    }
+}
+
+impl TryFrom<&str> for InstanceSpecifier {
+    type Error = Error;
+    fn try_from(s: &str) -> Result<Self> {
+        Self::new(s)
+    }
+}
+
+impl AsRef<str> for InstanceSpecifier {
+    fn as_ref(&self) -> &str {
+        self.specifier
+            .as_ref()
+            .map(String::as_str)
+            .unwrap_or("[ANY]")
+    }
 }
 
 /// This trait shall ensure that we can safely use an instance of the implementing type across
@@ -160,32 +230,61 @@ where
     ///
     /// This corresponds to `MaybeUninit::write`.
     fn write(self, value: T) -> Self::SampleMut;
+
+    /// Get a mutable pointer to the internal maybe uninitialized `T`.
+    ///
+    /// The caller has to make sure to initialize the data in the buffer.
+    /// Reading from the received pointer before initialization is undefined behavior.
+    fn as_mut_ptr(&mut self) -> *mut T;
 }
 
-pub trait Interface {}
+pub trait Interface {
+    type Consumer<R: Runtime + ?Sized>: Consumer<R>;
+    type Producer<R: Runtime + ?Sized>: Producer<R>;
+}
 
-pub trait OfferedProducer {
+#[must_use = "if a service is offered it will be unoffered and dropped immediately, causing unexpected behavior in the system"]
+pub trait OfferedProducer<R: Runtime + ?Sized> {
     type Interface: Interface;
-    type Producer: Producer<Interface = Self::Interface>;
+    type Producer: Producer<R, Interface = Self::Interface>;
 
     fn unoffer(self) -> Self::Producer;
 }
 
-pub trait Producer {
+pub trait Producer<R: Runtime + ?Sized> {
     type Interface: Interface;
-    type OfferedProducer: OfferedProducer<Interface = Self::Interface>;
+    type OfferedProducer: OfferedProducer<R, Interface = Self::Interface>;
 
     fn offer(self) -> Result<Self::OfferedProducer>;
 }
 
-pub trait Consumer {}
+pub trait Publisher<T>
+where
+    T: Reloc + Send,
+{
+    type SampleMaybeUninit<'a>: SampleMaybeUninit<T> + 'a
+    where
+        Self: 'a;
 
-pub trait ProducerBuilder<I: Interface, R: Runtime, P: Producer<Interface = I>>:
+    fn allocate<'a>(&'a self) -> Result<Self::SampleMaybeUninit<'a>>;
+
+    fn send(&self, value: T) -> Result<()> {
+        let sample = self.allocate()?;
+        let init_sample = sample.write(value);
+        init_sample.send()
+    }
+}
+
+pub trait Consumer<R: Runtime + ?Sized> {
+    fn new(instance_info: R::ConsumerInfo) -> Self;
+}
+
+pub trait ProducerBuilder<I: Interface, P: Producer<R, Interface = I>, R: Runtime + ?Sized>:
     Builder<P>
 {
 }
 
-pub trait ServiceDiscovery<I: Interface, R: Runtime> {
+pub trait ServiceDiscovery<I: Interface, R: Runtime + ?Sized> {
     type ConsumerBuilder: ConsumerBuilder<I, R>;
     type ServiceEnumerator: IntoIterator<Item = Self::ConsumerBuilder>;
 
@@ -193,15 +292,18 @@ pub trait ServiceDiscovery<I: Interface, R: Runtime> {
     // TODO: Provide an async stream for newly available services / ServiceDescriptors
 }
 
-pub trait ConsumerDescriptor<R: Runtime> {
+pub trait ConsumerDescriptor<R: Runtime + ?Sized> {
     fn get_instance_id(&self) -> usize; // TODO: Turn return type into separate type
 }
 
-pub trait ConsumerBuilder<I: Interface, R: Runtime>: ConsumerDescriptor<R> {}
+pub trait ConsumerBuilder<I: Interface, R: Runtime + ?Sized>:
+    ConsumerDescriptor<R> + Builder<I::Consumer<R>>
+{
+}
 
-pub trait Subscriber<T: Reloc + Send> {
-    type Subscription: Subscription<T>;
-
+pub trait Subscriber<T: Reloc + Send, R: Runtime + ?Sized,> {
+    type Subscription: Subscription<T, R>;
+    fn new(identifier: &str, instance_info: R::ConsumerInfo) -> Self;
     fn subscribe(self, max_num_samples: usize) -> Result<Self::Subscription>;
 }
 
@@ -251,8 +353,8 @@ impl<S> SampleContainer<S> {
     }
 }
 
-pub trait Subscription<T: Reloc + Send> {
-    type Subscriber: Subscriber<T>;
+pub trait Subscription<T: Reloc + Send, R: Runtime + ?Sized> {
+    type Subscriber: Subscriber<T, R>;
     type Sample<'a>: Sample<T>
     where
         Self: 'a;

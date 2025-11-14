@@ -16,6 +16,7 @@
 
 use std::cmp::Ordering;
 use std::collections::VecDeque;
+use std::future::Future;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
@@ -23,32 +24,46 @@ use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
 use com_api_concept::{
-    Builder, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, Reloc, Runtime,
-    SampleContainer, ServiceDiscovery, Subscriber, Subscription,
+    Builder, Consumer,ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, Reloc, Runtime,
+    SampleContainer, ServiceDiscovery, Subscriber, Subscription, Producer, ProducerBuilder, Result,
 };
 
 pub struct LolaRuntimeImpl {}
 
-impl Runtime for LolaRuntimeImpl {
-    type Sample<'a, T: Reloc + Send + 'a + std::fmt::Debug> = Sample<'a, T>;
+// Note: LolaProviderInfo is currently unused but will be utilized
+// with the Producer::offer() method in future implementations.
+#[derive(Clone)]
+pub struct LolaProviderInfo {
+    instance_specifier: InstanceSpecifier,
 }
 
-impl LolaRuntimeImpl {
-    // TODO: Any chance that these can be moved to a trait so that this becomes more testable?
-    // If yes, this trait is certainly located here since
-    pub fn find_service<I: Interface>(
+#[derive(Clone)]
+pub struct LolaConsumerInfo {
+    instance_specifier: InstanceSpecifier,
+}
+
+impl Runtime for LolaRuntimeImpl {
+    type ServiceDiscovery<I: Interface> = SampleConsumerDiscovery<I>;
+    type Subscriber<T: Reloc + Send> = SubscribableImpl<T>;
+    type ProducerBuilder<I: Interface, P: Producer<Self, Interface = I>> = SampleProducerBuilder<I>;
+    type Publisher<T: Reloc + Send> = Publisher<T>;
+    // TODO: Integrate with Producer::offer() method implementation
+    type ProviderInfo = LolaProviderInfo;
+    type ConsumerInfo = LolaConsumerInfo;
+
+    fn find_service<I: Interface>(
         &self,
         _instance_specifier: InstanceSpecifier,
-    ) -> SampleConsumerDiscovery<I> {
+    ) -> Self::ServiceDiscovery<I> {
         SampleConsumerDiscovery {
             _interface: PhantomData,
         }
     }
 
-    pub fn producer_builder<I: Interface>(
+    fn producer_builder<I: Interface, P: Producer<Self, Interface = I>>(
         &self,
         instance_specifier: InstanceSpecifier,
-    ) -> SampleProducerBuilder<I> {
+    ) -> Self::ProducerBuilder<I, P> {
         SampleProducerBuilder::new(self, instance_specifier)
     }
 }
@@ -147,7 +162,7 @@ where
     T: Reloc,
 {
     data: T,
-    _lifetime: PhantomData<&'a T>,
+    lifetime: PhantomData<&'a T>,
 }
 
 impl<'a, T> com_api_concept::SampleMut<T> for SampleMut<'a, T>
@@ -190,7 +205,7 @@ where
     T: Reloc + Send,
 {
     data: MaybeUninit<T>,
-    _lifetime: PhantomData<&'a T>,
+    lifetime: PhantomData<&'a T>,
 }
 
 impl<'a, T> com_api_concept::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
@@ -202,31 +217,48 @@ where
     fn write(self, val: T) -> SampleMut<'a, T> {
         SampleMut {
             data: val,
-            _lifetime: PhantomData,
+            lifetime: PhantomData,
         }
     }
 
-    unsafe fn assume_init(self) -> SampleMut<'a, T> { 
+    fn as_mut_ptr(&mut self) -> *mut T {
+        self.data.as_mut_ptr()
+    }
+
+    unsafe fn assume_init(self) -> SampleMut<'a, T> {
         SampleMut {
             data: unsafe { self.data.assume_init() },
-            _lifetime: PhantomData,
+            lifetime: PhantomData,
         }
     }
+
 }
 
 pub struct SubscribableImpl<T> {
-    _data: PhantomData<T>,
+    identifier: String,
+    instance_info: Option<LolaConsumerInfo>,
+    data: PhantomData<T>,
 }
 
 impl<T> Default for SubscribableImpl<T> {
     fn default() -> Self {
-        Self { _data: PhantomData }
+        Self {
+            identifier: String::new(),
+            instance_info: None,
+            data: PhantomData,
+        }
     }
 }
 
-impl<T: Reloc + Send> Subscriber<T> for SubscribableImpl<T> {
+impl<T: Reloc + Send> Subscriber<T,LolaRuntimeImpl> for SubscribableImpl<T> {
     type Subscription = SubscriberImpl<T>;
-
+    fn new(identifier: &str, instance_info: LolaConsumerInfo) -> Self {
+        Self {
+            identifier: identifier.to_string(),
+            instance_info: Some(instance_info),
+            data: PhantomData,
+        }
+    }
     fn subscribe(self, _max_num_samples: usize) -> com_api_concept::Result<Self::Subscription> {
         Ok(SubscriberImpl::new())
     }
@@ -255,7 +287,7 @@ where
     }
 }
 
-impl<T> Subscription<T> for SubscriberImpl<T>
+impl<T> Subscription<T, LolaRuntimeImpl> for SubscriberImpl<T>
 where
     T: Reloc + Send,
 {
@@ -308,11 +340,18 @@ where
     pub fn new() -> Self {
         Self { _data: PhantomData }
     }
+}
 
-    pub fn allocate<'a>(&'a self) -> com_api_concept::Result<SampleMaybeUninit<'a, T>> {
+impl<T> com_api_concept::Publisher<T> for Publisher<T>
+where
+    T: Reloc + Send,
+{
+    type SampleMaybeUninit<'a> = SampleMaybeUninit<'a, T> where Self: 'a;
+
+    fn allocate<'a>(&'a self) -> com_api_concept::Result<Self::SampleMaybeUninit<'a>> {
         Ok(SampleMaybeUninit {
             data: MaybeUninit::uninit(),
-            _lifetime: PhantomData,
+            lifetime: PhantomData,
         })
     }
 }
@@ -341,6 +380,17 @@ where
     }
 }
 
+impl<I: Interface> ConsumerBuilder<I, LolaRuntimeImpl> for SampleConsumerBuilder<I> {}
+
+impl<I: Interface> Builder<I::Consumer<LolaRuntimeImpl>> for SampleConsumerBuilder<I> {
+    fn build(self) -> com_api_concept::Result<I::Consumer<LolaRuntimeImpl>> {
+        let instance_info = LolaConsumerInfo {
+            instance_specifier: self.instance_specifier.clone(),
+        };
+        Ok(Consumer::new(instance_info))
+    }
+}
+
 pub struct SampleProducerBuilder<I: Interface> {
     instance_specifier: InstanceSpecifier,
     _interface: PhantomData<I>,
@@ -354,6 +404,15 @@ impl<I: Interface> SampleProducerBuilder<I> {
         }
     }
 }
+
+impl<I: Interface, P: Producer<LolaRuntimeImpl, Interface = I>> ProducerBuilder<I, P, LolaRuntimeImpl> for SampleProducerBuilder<I> {}
+
+impl<I: Interface, P: Producer<LolaRuntimeImpl, Interface = I>> Builder<P> for SampleProducerBuilder<I> {
+    fn build(self) -> Result<P> {
+        todo!()
+    }
+}
+
 
 pub struct SampleConsumerDescriptor<I: Interface> {
     _interface: PhantomData<I>,
@@ -408,7 +467,7 @@ impl RuntimeBuilderImpl {
 
 #[cfg(test)]
 mod test {
-    use com_api_concept::{SampleContainer, Subscription};
+    use com_api_concept::{Publisher, SampleContainer, SampleMaybeUninit, SampleMut, Subscription};
 
     #[test]
     fn receive_stuff() {
@@ -448,5 +507,13 @@ mod test {
                 Err(e) => panic!("{:?}", e),
             }
         })
+    }
+
+    #[test]
+    fn send_stuff() {
+        let test_publisher = super::Publisher::<u32>::new();
+        let sample = test_publisher.allocate().expect("Couldn't allocate sample");
+        let sample = sample.write(42);
+        sample.send().expect("Send failed for sample");
     }
 }

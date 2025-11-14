@@ -22,8 +22,7 @@
 //!
 //! ```
 
-use com_api::*;
-use com_api_runtime_lola::{LolaRuntimeImpl, SampleConsumerBuilder, SampleProducerBuilder};
+use com_api::{Consumer, Interface, OfferedProducer, Producer, Reloc, Runtime, Subscriber};
 
 #[derive(Debug)]
 pub struct Tire {}
@@ -35,59 +34,53 @@ unsafe impl Reloc for Exhaust {}
 pub struct VehicleInterface {}
 
 /// Generic
-impl Interface for VehicleInterface {}
+impl Interface for VehicleInterface {
+    type Consumer<R: Runtime + ?Sized> = VehicleConsumer<R>;
+    type Producer<R: Runtime + ?Sized> = VehicleProducer<R>;
+}
+
+pub struct VehicleConsumer<R: Runtime + ?Sized> {
+    pub left_tire: R::Subscriber<Tire>,
+    pub exhaust: R::Subscriber<Exhaust>,
+}
+
+impl<R: Runtime + ?Sized> Consumer<R> for VehicleConsumer<R> {
+    fn new(instance_info: R::ConsumerInfo) -> Self {
+        VehicleConsumer {
+            left_tire: R::Subscriber::new("left_tire", instance_info.clone()),
+            exhaust: R::Subscriber::new("exhaust", instance_info.clone()),
+        }
+    }
+}
 
 pub struct AnotherInterface {}
 
-impl Interface for AnotherInterface {}
+pub struct VehicleProducer<R: Runtime + ?Sized>
+{
+    _runtime: std::marker::PhantomData<R>,
+}
 
-pub struct VehicleProducer {}
-
-impl Producer for VehicleProducer {
+impl<R: Runtime + ?Sized> Producer<R> for VehicleProducer<R> {
     type Interface = VehicleInterface;
-    type OfferedProducer = VehicleOfferedProducer;
+    type OfferedProducer = VehicleOfferedProducer<R>;
 
     fn offer(self) -> com_api::Result<Self::OfferedProducer> {
         todo!()
     }
 }
 
-pub struct VehicleOfferedProducer {
-    pub left_tire: com_api_runtime_lola::Publisher<Tire>,
-    pub exhaust: com_api_runtime_lola::Publisher<Exhaust>,
+pub struct VehicleOfferedProducer<R: Runtime + ?Sized> {
+    pub left_tire: R::Publisher<Tire>,
+    pub exhaust: R::Publisher<Exhaust>,
 }
 
-impl OfferedProducer for VehicleOfferedProducer {
+impl<R: Runtime + ?Sized> OfferedProducer<R> for VehicleOfferedProducer<R> {
     type Interface = VehicleInterface;
-    type Producer = VehicleProducer;
+    type Producer = VehicleProducer<R>;
 
     fn unoffer(self) -> Self::Producer {
-        VehicleProducer {}
-    }
-}
-
-impl Builder<VehicleProducer> for SampleProducerBuilder<VehicleInterface> {
-    fn build(self) -> com_api::Result<VehicleProducer> {
-        todo!()
-    }
-}
-
-impl ProducerBuilder<VehicleInterface, LolaRuntimeImpl, VehicleProducer>
-    for SampleProducerBuilder<VehicleInterface>
-{
-}
-
-pub struct VehicleConsumer {
-    pub left_tire: com_api_runtime_lola::SubscribableImpl<Tire>,
-    pub exhaust: com_api_runtime_lola::SubscribableImpl<Exhaust>,
-}
-
-impl Consumer for VehicleConsumer {}
-
-impl ConsumerBuilder<VehicleInterface, LolaRuntimeImpl> for SampleConsumerBuilder<VehicleInterface> {}
-
-impl Builder<VehicleConsumer> for SampleConsumerBuilder<VehicleInterface> {
-    fn build(self) -> com_api::Result<VehicleConsumer> {
-        todo!()
+        VehicleProducer {
+            _runtime: std::marker::PhantomData,
+        }
     }
 }

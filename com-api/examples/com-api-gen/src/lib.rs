@@ -10,6 +10,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #[cfg(feature = "mock")]
-pub use com_api_gen_mock::{Tire, VehicleInterface};
+pub use com_api_gen_mock::{Tire, VehicleInterface, VehicleConsumer, VehicleProducer, VehicleOfferedProducer};
 #[cfg(feature = "lola")]
-pub use com_api_gen_lola::{Tire, VehicleInterface};
+pub use com_api_gen_lola::{Tire, VehicleInterface,  VehicleConsumer, VehicleProducer, VehicleOfferedProducer};
