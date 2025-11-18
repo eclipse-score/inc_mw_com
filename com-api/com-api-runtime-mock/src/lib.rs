@@ -16,14 +16,15 @@
 
 #![allow(dead_code)]
 
-use std::cmp::Ordering;
-use std::collections::VecDeque;
-use std::future::Future;
-use std::marker::PhantomData;
-use std::mem::MaybeUninit;
-use std::ops::{Deref, DerefMut};
 use std::path::Path;
-use std::sync::atomic::AtomicUsize;
+use std::collections::VecDeque;
+use core::future::Future;
+use core::marker::PhantomData;
+use core::mem::MaybeUninit;
+use core::ops::{Deref, DerefMut};
+use core::sync::atomic::AtomicUsize;
+use core::cmp::Ordering;
+use core::fmt::Debug;
 
 use com_api_concept::{
     Builder, Consumer, ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, Reloc, Runtime,
@@ -46,9 +47,9 @@ pub struct MockConsumerInfo {
 
 impl Runtime for MockRuntimeImpl {
     type ServiceDiscovery<I: Interface> = SampleConsumerDiscovery<I>;
-    type Subscriber<T: Reloc + Send> = SubscribableImpl<T>;
+    type Subscriber<T: Reloc + Send + Debug> = SubscribableImpl<T>;
     type ProducerBuilder<I: Interface, P: Producer<Self, Interface = I>> = SampleProducerBuilder<I>;
-    type Publisher<T: Reloc + Send> = Publisher<T>;
+    type Publisher<T: Reloc + Send + Debug> = Publisher<T>;
     // TODO: Integrate with Producer::offer() method implementation
     type ProviderInfo = MockProviderInfo;
     type ConsumerInfo = MockConsumerInfo;
@@ -70,10 +71,12 @@ impl Runtime for MockRuntimeImpl {
     }
 }
 
+#[derive(Debug)]
 struct MockEvent<T> {
     event: PhantomData<T>,
 }
 
+#[derive(Debug)]
 struct MockBinding<'a, T>
 where
     T: Send,
@@ -84,6 +87,7 @@ where
 
 unsafe impl<'a, T> Send for MockBinding<'a, T> where T: Send {}
 
+#[derive(Debug)]
 enum SampleBinding<'a, T>
 where
     T: Send,
@@ -92,6 +96,7 @@ where
     Test(Box<T>),
 }
 
+#[derive(Debug)]
 pub struct Sample<'a, T>
 where
     T: Reloc + Send,
@@ -104,11 +109,11 @@ static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 impl<'a, T> From<T> for Sample<'a, T>
 where
-    T: Reloc + Send,
+    T: Reloc + Send + Debug,
 {
     fn from(value: T) -> Self {
         Self {
-            id: ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            id: ID_COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed),
             inner: SampleBinding::Test(Box::new(value)),
         }
     }
@@ -128,7 +133,7 @@ where
     }
 }
 
-impl<'a, T> com_api_concept::Sample<T> for Sample<'a, T> where T: Send + Reloc {}
+impl<'a, T> com_api_concept::Sample<T> for Sample<'a, T> where T: Send + Reloc + Debug {}
 
 impl<'a, T> PartialEq for Sample<'a, T>
 where
@@ -159,6 +164,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct SampleMut<'a, T>
 where
     T: Reloc,
@@ -169,7 +175,7 @@ where
 
 impl<'a, T> com_api_concept::SampleMut<T> for SampleMut<'a, T>
 where
-    T: Reloc + Send,
+    T: Reloc + Send + Debug,
 {
     type Sample = Sample<'a, T>;
 
@@ -202,6 +208,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct SampleMaybeUninit<'a, T>
 where
     T: Reloc + Send,
@@ -212,7 +219,7 @@ where
 
 impl<'a, T> com_api_concept::SampleMaybeUninit<T> for SampleMaybeUninit<'a, T>
 where
-    T: Reloc + Send,
+    T: Reloc + Send + Debug,
 {
     type SampleMut = SampleMut<'a, T>;
 
@@ -251,7 +258,7 @@ impl<T> Default for SubscribableImpl<T> {
     }
 }
 
-impl<T: Reloc + Send> Subscriber<T, MockRuntimeImpl> for SubscribableImpl<T> {
+impl<T: Reloc + Send + Debug> Subscriber<T, MockRuntimeImpl> for SubscribableImpl<T> {
     type Subscription = SubscriberImpl<T>;
     fn new(identifier: &str, instance_info: MockConsumerInfo) -> Self {
         Self {
@@ -290,7 +297,7 @@ where
 
 impl<T> Subscription<T, MockRuntimeImpl> for SubscriberImpl<T>
 where
-    T: Reloc + Send,
+    T: Reloc + Send + Debug,
 {
     type Subscriber = SubscribableImpl<T>;
     type Sample<'a>
@@ -345,11 +352,11 @@ where
 
 impl<T> com_api_concept::Publisher<T> for Publisher<T>
 where
-    T: Reloc + Send,
+    T: Reloc + Send + Debug,
 {
     type SampleMaybeUninit<'a> = SampleMaybeUninit<'a, T> where Self: 'a;
 
-    fn allocate<'a>(&'a self) -> com_api_concept::Result<SampleMaybeUninit<'a, T>> {
+    fn allocate<'a>(&'a self) -> com_api_concept::Result<Self::SampleMaybeUninit<'a>> {
         Ok(SampleMaybeUninit {
             data: MaybeUninit::uninit(),
             lifetime: PhantomData,
@@ -378,6 +385,11 @@ where
 
     fn get_available_instances(&self) -> com_api_concept::Result<Self::ServiceEnumerator> {
         Ok(Vec::new())
+    }
+
+    #[allow(clippy::manual_async_fn)]
+    fn get_available_instances_async(&self) -> impl Future<Output = com_api_concept::Result<Self::ServiceEnumerator>> {
+        async { Ok(Vec::new()) }
     }
 }
 
@@ -460,7 +472,7 @@ impl Default for RuntimeBuilderImpl {
 }
 
 impl RuntimeBuilderImpl {
-    /// Creates a new instance of the default implementation of the com layer
+    /// Creates a new instance of the default implementation for the com module of s-core
     pub fn new() -> Self {
         Self {}
     }

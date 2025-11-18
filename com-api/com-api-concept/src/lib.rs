@@ -44,11 +44,11 @@
 //! - Structures
 //! - Tuples
 
-use std::collections::VecDeque;
-use std::fmt::Debug;
-use std::future::Future;
-use std::ops::{Deref, DerefMut};
+use core::fmt::Debug;
+use core::future::Future;
+use core::ops::{Deref, DerefMut};
 use std::path::Path;
+use std::collections::VecDeque;
 
 #[derive(Debug)]
 pub enum Error {
@@ -59,7 +59,7 @@ pub enum Error {
     SubscribeFailed,
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 /// Generic trait for all "factory-like" types
 pub trait Builder<Output> {
@@ -75,9 +75,9 @@ pub trait Builder<Output> {
 // * ConsumerInfo - Information about a consumer instance required to pass to different traits/types/methods
 pub trait Runtime {
     type ServiceDiscovery<I: Interface>: ServiceDiscovery<I, Self>;
-    type Subscriber<T: Reloc + Send>: Subscriber<T, Self>;
+    type Subscriber<T: Reloc + Send + Debug>: Subscriber<T, Self>;
     type ProducerBuilder<I: Interface, P: Producer<Self, Interface = I>>: ProducerBuilder<I, P, Self>;
-    type Publisher<T: Reloc + Send>: Publisher<T>;
+    type Publisher<T: Reloc + Send + Debug>: Publisher<T>;
     type ProviderInfo: Send + Clone;
     type ConsumerInfo: Send + Clone;
 
@@ -104,7 +104,7 @@ where
 /// The string shall describe where to find a certain instance of a service. Each level shall look
 /// like this
 /// <InterfaceName>:my/path/to/service_name
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InstanceSpecifier {
     specifier: Option<String>,
 }
@@ -115,9 +115,11 @@ impl InstanceSpecifier {
     pub const MATCH_ANY: Self = InstanceSpecifier { specifier: None };
 
     fn check_str(_service_name: &str) -> bool {
-        // For now, accept any non-empty string as a valid service name
-        // In a real implementation, this might validate the format
-        true
+
+        // need to validated service name convention according to backend specification
+        //for that either call into backend specific code or implement generic checks here
+        
+        todo!()
     }
 
     /// Create a new instance specifier, using the string-like input as the path to the
@@ -171,6 +173,13 @@ pub unsafe trait Reloc {}
 
 unsafe impl Reloc for () {}
 unsafe impl Reloc for u32 {}
+unsafe impl Reloc for u64 {}
+unsafe impl Reloc for i32 {}
+unsafe impl Reloc for i64 {}
+unsafe impl Reloc for f32 {}
+unsafe impl Reloc for f64 {}
+unsafe impl Reloc for bool {}
+unsafe impl Reloc for char {}
 
 /// A `Sample` provides a reference to a memory buffer of an event with immutable value.
 ///
@@ -179,9 +188,9 @@ unsafe impl Reloc for u32 {}
 ///
 /// The ordering of SamplePtrs is total over the reception order
 // TODO: C++ doesn't yet support this. Expose API to compare SamplePtr ages.
-pub trait Sample<T>: Deref<Target = T> + Send + PartialOrd + Ord
+pub trait Sample<T>: Deref<Target = T> + Send + PartialOrd + Ord + Debug
 where
-    T: Send + Reloc,
+    T: Send + Reloc + Debug,
 {
 }
 
@@ -189,9 +198,9 @@ where
 ///
 /// By implementing the `DerefMut` trait implementations of the trait support the `.` operator for dereferencing.
 /// The buffers with its data lives as long as there are references to it existing in the framework.
-pub trait SampleMut<T>: DerefMut<Target = T>
+pub trait SampleMut<T>: DerefMut<Target = T> + Debug
 where
-    T: Send + Reloc,
+    T: Send + Reloc + Debug,
 {
     /// The associated read-only sample type.
     type Sample: Sample<T>;
@@ -210,9 +219,9 @@ where
 ///
 /// TODO: Shall we also require DerefMut<Target=MaybeUninit<T>> from implementing types? How to deal
 /// TODO: with the ambiguous assume_init() then?
-pub trait SampleMaybeUninit<T>
+pub trait SampleMaybeUninit<T> : Debug
 where
-    T: Send + Reloc,
+    T: Send + Reloc + Debug,
 {
     /// Buffer type for mutable data after initialization
     type SampleMut: SampleMut<T>;
@@ -260,7 +269,7 @@ pub trait Producer<R: Runtime + ?Sized> {
 
 pub trait Publisher<T>
 where
-    T: Reloc + Send,
+    T: Reloc + Send + Debug,
 {
     type SampleMaybeUninit<'a>: SampleMaybeUninit<T> + 'a
     where
@@ -289,7 +298,10 @@ pub trait ServiceDiscovery<I: Interface, R: Runtime + ?Sized> {
     type ServiceEnumerator: IntoIterator<Item = Self::ConsumerBuilder>;
 
     fn get_available_instances(&self) -> Result<Self::ServiceEnumerator>;
-    // TODO: Provide an async stream for newly available services / ServiceDescriptors
+
+    #[allow(clippy::manual_async_fn)]
+    fn get_available_instances_async(&self) -> impl Future<Output = Result<Self::ServiceEnumerator>> + Send;
+    
 }
 
 pub trait ConsumerDescriptor<R: Runtime + ?Sized> {
@@ -301,7 +313,7 @@ pub trait ConsumerBuilder<I: Interface, R: Runtime + ?Sized>:
 {
 }
 
-pub trait Subscriber<T: Reloc + Send, R: Runtime + ?Sized,> {
+pub trait Subscriber<T: Reloc + Send + Debug, R: Runtime + ?Sized,> {
     type Subscription: Subscription<T, R>;
     fn new(identifier: &str, instance_info: R::ConsumerInfo) -> Self;
     fn subscribe(self, max_num_samples: usize) -> Result<Self::Subscription>;
@@ -327,7 +339,7 @@ impl<S> SampleContainer<S> {
     pub fn iter<'a, T>(&'a self) -> impl Iterator<Item = &'a T>
     where
         S: Sample<T>,
-        T: Reloc + Send + 'a,
+        T: Reloc + Send + 'a + Debug,
     {
         self.inner.iter().map(<S as Deref>::deref)
     }
@@ -345,7 +357,7 @@ impl<S> SampleContainer<S> {
         self.inner.len()
     }
 
-    pub fn front<T: Reloc + Send>(&self) -> Option<&T>
+    pub fn front<T: Reloc + Send + Debug>(&self) -> Option<&T>
     where
         S: Sample<T>,
     {
@@ -353,7 +365,7 @@ impl<S> SampleContainer<S> {
     }
 }
 
-pub trait Subscription<T: Reloc + Send, R: Runtime + ?Sized> {
+pub trait Subscription<T: Reloc + Send + Debug, R: Runtime + ?Sized> {
     type Subscriber: Subscriber<T, R>;
     type Sample<'a>: Sample<T>
     where

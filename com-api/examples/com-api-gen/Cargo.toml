@@ -5,10 +5,5 @@ edition = "2024"
 publish = ["common"]
 license = "Apache-2.0"
 
-[features]
-mock = ["com-api-gen-mock"]
-lola = ["com-api-gen-lola"]
-
 [dependencies]
-com-api-gen-mock = { path = "com-api-gen-mock", optional = true  }
-com-api-gen-lola = { path = "com-api-gen-lola", optional = true  }
+com-api = { workspace = true }
