@@ -13,13 +13,14 @@
 //! of the COM API, e.g., for different IPC backends.
 //! The actual implementations are provided by the `com-api-runtime-mock` and `com-api-runtime-lola` crates.
 
-pub use com_api_runtime_mock::RuntimeBuilderImpl as MockRuntimeBuilderImpl;
-pub use com_api_runtime_mock::MockRuntimeImpl;
-pub use com_api_runtime_lola::RuntimeBuilderImpl as LolaRuntimeBuilderImpl;
 pub use com_api_runtime_lola::LolaRuntimeImpl;
+pub use com_api_runtime_lola::RuntimeBuilderImpl as LolaRuntimeBuilderImpl;
+pub use com_api_runtime_mock::MockRuntimeImpl;
+pub use com_api_runtime_mock::RuntimeBuilderImpl as MockRuntimeBuilderImpl;
 
 pub use com_api_concept::{
-    Builder, Consumer, ConsumerBuilder, ConsumerDescriptor, Error, InstanceSpecifier, Interface,
-    OfferedProducer, Producer, ProducerBuilder, Publisher, Reloc, Runtime, Result, SampleContainer, SampleMaybeUninit,
-    SampleMut, ServiceDiscovery, Subscriber, Subscription,
+    Builder, Consumer, ConsumerBuilder, ConsumerDescriptor, Error, FindServiceSpecifier,
+    InstanceSpecifier, Interface, OfferedProducer, Producer, ProducerBuilder, Publisher, Reloc,
+    Result, Runtime, SampleContainer, SampleMaybeUninit, SampleMut, ServiceDiscovery, Subscriber,
+    Subscription,
 };

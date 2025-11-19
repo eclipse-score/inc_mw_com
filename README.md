@@ -7,15 +7,15 @@ Examples can be built from examples directory by passing desired IPC adapter as 
 
 For build:
 ```
-inc_mw_com$ cargo build --example basic-consumer-producer 
+inc_mw_com/com-api$ cargo build --example basic-consumer-producer 
 ```
 
-For mock test:
+For test:
 ```
-inc_mw_com$ cargo test --test basic-consumer-producer-test 
+inc_mw_com/com-api$ cargo test --test basic-consumer-producer-test 
 ```
 
-For mock Build and Run:
+For Build and Run:
 ```
 inc_mw_com/com-api$ cargo run --example basic-consumer-producer 
 ```

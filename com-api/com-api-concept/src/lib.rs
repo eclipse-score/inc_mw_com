@@ -47,8 +47,10 @@
 use core::fmt::Debug;
 use core::future::Future;
 use core::ops::{Deref, DerefMut};
-use std::path::Path;
+pub mod reloc;
+pub use reloc::Reloc;
 use std::collections::VecDeque;
+use std::path::Path;
 
 #[derive(Debug)]
 pub enum Error {
@@ -77,13 +79,13 @@ pub trait Runtime {
     type ServiceDiscovery<I: Interface>: ServiceDiscovery<I, Self>;
     type Subscriber<T: Reloc + Send + Debug>: Subscriber<T, Self>;
     type ProducerBuilder<I: Interface, P: Producer<Self, Interface = I>>: ProducerBuilder<I, P, Self>;
-    type Publisher<T: Reloc + Send + Debug>: Publisher<T>;
+    type Publisher<T: Reloc + Send + Debug>: Publisher<T, Self>;
     type ProviderInfo: Send + Clone;
     type ConsumerInfo: Send + Clone;
 
     fn find_service<I: Interface>(
         &self,
-        _instance_specifier: InstanceSpecifier,
+        _instance_specifier: FindServiceSpecifier,
     ) -> Self::ServiceDiscovery<I>;
 
     fn producer_builder<I: Interface, P: Producer<Self, Interface = I>>(
@@ -110,16 +112,14 @@ pub struct InstanceSpecifier {
 }
 
 impl InstanceSpecifier {
-    /// Instance specifier that will match any instance. This can be used to find all
-    /// instances of a certain interface during service discovery.
-    pub const MATCH_ANY: Self = InstanceSpecifier { specifier: None };
-
-    fn check_str(_service_name: &str) -> bool {
-
-        // need to validated service name convention according to backend specification
-        //for that either call into backend specific code or implement generic checks here
-        
-        todo!()
+    fn check_str(service_name: &str) -> bool {
+        // validation for service name- my/path/to/servicename
+        // allowed characters: a-z A-Z 0-9 and '/'
+        // no leading, trailing or consecutive '/'
+        !service_name.is_empty()
+            && service_name.split('/').all(|parts| {
+                !parts.is_empty() && parts.bytes().all(|part| part.is_ascii_alphanumeric())
+            })
     }
 
     /// Create a new instance specifier, using the string-like input as the path to the
@@ -154,6 +154,11 @@ impl AsRef<str> for InstanceSpecifier {
             .unwrap_or("[ANY]")
     }
 }
+/// Specifies whether to find a specific service instance or any available instance
+pub enum FindServiceSpecifier {
+    Specific(InstanceSpecifier),
+    Any,
+}
 
 /// This trait shall ensure that we can safely use an instance of the implementing type across
 /// address boundaries. This property may be violated by the following circumstances:
@@ -169,17 +174,9 @@ impl AsRef<str> for InstanceSpecifier {
 ///
 /// Since it is yet to be proven whether this trait can be implemented safely (assumption is: no) it
 /// is unsafe for now. The expectation is that very few users ever need to implement this manually.
-pub unsafe trait Reloc {}
 
-unsafe impl Reloc for () {}
-unsafe impl Reloc for u32 {}
-unsafe impl Reloc for u64 {}
-unsafe impl Reloc for i32 {}
-unsafe impl Reloc for i64 {}
-unsafe impl Reloc for f32 {}
-unsafe impl Reloc for f64 {}
-unsafe impl Reloc for bool {}
-unsafe impl Reloc for char {}
+// Reloc trait and its implementations have been moved to reloc.rs
+// Use `use reloc::Reloc;` to import it here and in other files.
 
 /// A `Sample` provides a reference to a memory buffer of an event with immutable value.
 ///
@@ -193,7 +190,6 @@ where
     T: Send + Reloc + Debug,
 {
 }
-
 /// A `SampleMut` provides a reference to a memory buffer of an event with mutable value.
 ///
 /// By implementing the `DerefMut` trait implementations of the trait support the `.` operator for dereferencing.
@@ -219,7 +215,7 @@ where
 ///
 /// TODO: Shall we also require DerefMut<Target=MaybeUninit<T>> from implementing types? How to deal
 /// TODO: with the ambiguous assume_init() then?
-pub trait SampleMaybeUninit<T> : Debug
+pub trait SampleMaybeUninit<T>: Debug + AsMut<core::mem::MaybeUninit<T>>
 where
     T: Send + Reloc + Debug,
 {
@@ -239,15 +235,10 @@ where
     ///
     /// This corresponds to `MaybeUninit::write`.
     fn write(self, value: T) -> Self::SampleMut;
-
-    /// Get a mutable pointer to the internal maybe uninitialized `T`.
-    ///
-    /// The caller has to make sure to initialize the data in the buffer.
-    /// Reading from the received pointer before initialization is undefined behavior.
-    fn as_mut_ptr(&mut self) -> *mut T;
 }
 
 pub trait Interface {
+    const TYPE_ID: &'static str; // the id will be used at backend
     type Consumer<R: Runtime + ?Sized>: Consumer<R>;
     type Producer<R: Runtime + ?Sized>: Producer<R>;
 }
@@ -263,11 +254,13 @@ pub trait OfferedProducer<R: Runtime + ?Sized> {
 pub trait Producer<R: Runtime + ?Sized> {
     type Interface: Interface;
     type OfferedProducer: OfferedProducer<R, Interface = Self::Interface>;
-
+    fn new(instance_info: R::ProviderInfo) -> Result<Self>
+    where
+        Self: Sized;
     fn offer(self) -> Result<Self::OfferedProducer>;
 }
 
-pub trait Publisher<T>
+pub trait Publisher<T, R: Runtime + ?Sized>
 where
     T: Reloc + Send + Debug,
 {
@@ -277,6 +270,10 @@ where
 
     fn allocate<'a>(&'a self) -> Result<Self::SampleMaybeUninit<'a>>;
 
+    fn new(identifier: &str, instance_info: R::ProviderInfo) -> Result<Self>
+    where
+        Self: Sized;
+
     fn send(&self, value: T) -> Result<()> {
         let sample = self.allocate()?;
         let init_sample = sample.write(value);
@@ -285,7 +282,9 @@ where
 }
 
 pub trait Consumer<R: Runtime + ?Sized> {
-    fn new(instance_info: R::ConsumerInfo) -> Self;
+    fn new(instance_info: R::ConsumerInfo) -> Result<Self>
+    where
+        Self: Sized;
 }
 
 pub trait ProducerBuilder<I: Interface, P: Producer<R, Interface = I>, R: Runtime + ?Sized>:
@@ -300,12 +299,13 @@ pub trait ServiceDiscovery<I: Interface, R: Runtime + ?Sized> {
     fn get_available_instances(&self) -> Result<Self::ServiceEnumerator>;
 
     #[allow(clippy::manual_async_fn)]
-    fn get_available_instances_async(&self) -> impl Future<Output = Result<Self::ServiceEnumerator>> + Send;
-    
+    fn get_available_instances_async(
+        &self,
+    ) -> impl Future<Output = Result<Self::ServiceEnumerator>> + Send;
 }
 
 pub trait ConsumerDescriptor<R: Runtime + ?Sized> {
-    fn get_instance_id(&self) -> usize; // TODO: Turn return type into separate type
+    fn get_instance_identifier(&self) -> String;
 }
 
 pub trait ConsumerBuilder<I: Interface, R: Runtime + ?Sized>:
@@ -313,10 +313,12 @@ pub trait ConsumerBuilder<I: Interface, R: Runtime + ?Sized>:
 {
 }
 
-pub trait Subscriber<T: Reloc + Send + Debug, R: Runtime + ?Sized,> {
+pub trait Subscriber<T: Reloc + Send + Debug, R: Runtime + ?Sized> {
     type Subscription: Subscription<T, R>;
-    fn new(identifier: &str, instance_info: R::ConsumerInfo) -> Self;
-    fn subscribe(self, max_num_samples: usize) -> Result<Self::Subscription>;
+    fn new(identifier: &str, instance_info: R::ConsumerInfo) -> Result<Self>
+    where
+        Self: Sized;
+    fn subscribe(&self, max_num_samples: usize) -> Result<Self::Subscription>;
 }
 
 pub struct SampleContainer<S> {

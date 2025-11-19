@@ -14,19 +14,20 @@
 
 #![allow(dead_code)]
 
-use std::path::Path;
-use std::collections::VecDeque;
+use core::cmp::Ordering;
+use core::fmt::Debug;
 use core::future::Future;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::AtomicUsize;
-use core::cmp::Ordering;
-use core::fmt::Debug;
+use std::collections::VecDeque;
+use std::path::Path;
 
 use com_api_concept::{
-    Builder, Consumer,ConsumerBuilder, ConsumerDescriptor, InstanceSpecifier, Interface, Reloc, Runtime,
-    SampleContainer, ServiceDiscovery, Subscriber, Subscription, Producer, ProducerBuilder, Result,
+    Builder, Consumer, ConsumerBuilder, ConsumerDescriptor, FindServiceSpecifier,
+    InstanceSpecifier, Interface, Producer, ProducerBuilder, Reloc, Result, Runtime,
+    SampleContainer, ServiceDiscovery, Subscriber, Subscription,
 };
 
 pub struct LolaRuntimeImpl {}
@@ -48,13 +49,12 @@ impl Runtime for LolaRuntimeImpl {
     type Subscriber<T: Reloc + Send + Debug> = SubscribableImpl<T>;
     type ProducerBuilder<I: Interface, P: Producer<Self, Interface = I>> = SampleProducerBuilder<I>;
     type Publisher<T: Reloc + Send + Debug> = Publisher<T>;
-    // TODO: Integrate with Producer::offer() method implementation
     type ProviderInfo = LolaProviderInfo;
     type ConsumerInfo = LolaConsumerInfo;
 
     fn find_service<I: Interface>(
         &self,
-        _instance_specifier: InstanceSpecifier,
+        _instance_specifier: FindServiceSpecifier,
     ) -> Self::ServiceDiscovery<I> {
         SampleConsumerDiscovery {
             _interface: PhantomData,
@@ -97,7 +97,7 @@ where
 #[derive(Debug)]
 pub struct Sample<'a, T>
 where
-    T: Reloc + Send ,
+    T: Reloc + Send,
 {
     id: usize,
     inner: SampleBinding<'a, T>,
@@ -161,7 +161,6 @@ where
         self.id.cmp(&other.id)
     }
 }
-
 
 #[derive(Debug)]
 pub struct SampleMut<'a, T>
@@ -229,17 +228,21 @@ where
         }
     }
 
-    fn as_mut_ptr(&mut self) -> *mut T {
-        self.data.as_mut_ptr()
-    }
-
     unsafe fn assume_init(self) -> SampleMut<'a, T> {
         SampleMut {
             data: unsafe { self.data.assume_init() },
             lifetime: PhantomData,
         }
     }
+}
 
+impl<'a, T> AsMut<core::mem::MaybeUninit<T>> for SampleMaybeUninit<'a, T>
+where
+    T: Reloc + Send + Debug,
+{
+    fn as_mut(&mut self) -> &mut core::mem::MaybeUninit<T> {
+        &mut self.data
+    }
 }
 
 pub struct SubscribableImpl<T> {
@@ -258,16 +261,16 @@ impl<T> Default for SubscribableImpl<T> {
     }
 }
 
-impl<T: Reloc + Send + Debug> Subscriber<T,LolaRuntimeImpl> for SubscribableImpl<T> {
+impl<T: Reloc + Send + Debug> Subscriber<T, LolaRuntimeImpl> for SubscribableImpl<T> {
     type Subscription = SubscriberImpl<T>;
-    fn new(identifier: &str, instance_info: LolaConsumerInfo) -> Self {
-        Self {
+    fn new(identifier: &str, instance_info: LolaConsumerInfo) -> com_api_concept::Result<Self> {
+        Ok(Self {
             identifier: identifier.to_string(),
             instance_info: Some(instance_info),
             data: PhantomData,
-        }
+        })
     }
-    fn subscribe(self, _max_num_samples: usize) -> com_api_concept::Result<Self::Subscription> {
+    fn subscribe(&self, _max_num_samples: usize) -> com_api_concept::Result<Self::Subscription> {
         Ok(SubscriberImpl::new())
     }
 }
@@ -350,11 +353,18 @@ where
     }
 }
 
-impl<T> com_api_concept::Publisher<T> for Publisher<T>
+impl<T> com_api_concept::Publisher<T, LolaRuntimeImpl> for Publisher<T>
 where
     T: Reloc + Send + Debug,
 {
-    type SampleMaybeUninit<'a> = SampleMaybeUninit<'a, T> where Self: 'a;
+    type SampleMaybeUninit<'a>
+        = SampleMaybeUninit<'a, T>
+    where
+        Self: 'a;
+
+    fn new(_identifier: &str, _instance_info: LolaProviderInfo) -> com_api_concept::Result<Self> {
+        Ok(Self { _data: PhantomData })
+    }
 
     fn allocate<'a>(&'a self) -> com_api_concept::Result<Self::SampleMaybeUninit<'a>> {
         Ok(SampleMaybeUninit {
@@ -388,10 +398,11 @@ where
     }
 
     #[allow(clippy::manual_async_fn)]
-    fn get_available_instances_async(&self) -> impl Future<Output = com_api_concept::Result<Self::ServiceEnumerator>> {
+    fn get_available_instances_async(
+        &self,
+    ) -> impl Future<Output = com_api_concept::Result<Self::ServiceEnumerator>> + Send {
         async { Ok(Vec::new()) }
     }
-
 }
 
 impl<I: Interface> ConsumerBuilder<I, LolaRuntimeImpl> for SampleConsumerBuilder<I> {}
@@ -401,7 +412,7 @@ impl<I: Interface> Builder<I::Consumer<LolaRuntimeImpl>> for SampleConsumerBuild
         let instance_info = LolaConsumerInfo {
             instance_specifier: self.instance_specifier.clone(),
         };
-        Ok(Consumer::new(instance_info))
+        Ok(Consumer::new(instance_info)?)
     }
 }
 
@@ -419,14 +430,18 @@ impl<I: Interface> SampleProducerBuilder<I> {
     }
 }
 
-impl<I: Interface, P: Producer<LolaRuntimeImpl, Interface = I>> ProducerBuilder<I, P, LolaRuntimeImpl> for SampleProducerBuilder<I> {}
+impl<I: Interface, P: Producer<LolaRuntimeImpl, Interface = I>>
+    ProducerBuilder<I, P, LolaRuntimeImpl> for SampleProducerBuilder<I>
+{
+}
 
-impl<I: Interface, P: Producer<LolaRuntimeImpl, Interface = I>> Builder<P> for SampleProducerBuilder<I> {
+impl<I: Interface, P: Producer<LolaRuntimeImpl, Interface = I>> Builder<P>
+    for SampleProducerBuilder<I>
+{
     fn build(self) -> Result<P> {
         todo!()
     }
 }
-
 
 pub struct SampleConsumerDescriptor<I: Interface> {
     _interface: PhantomData<I>,
@@ -446,7 +461,7 @@ pub struct SampleConsumerBuilder<I: Interface> {
 }
 
 impl<I: Interface> ConsumerDescriptor<LolaRuntimeImpl> for SampleConsumerBuilder<I> {
-    fn get_instance_id(&self) -> usize {
+    fn get_instance_identifier(&self) -> String {
         todo!()
     }
 }

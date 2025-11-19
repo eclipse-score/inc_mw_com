@@ -7,7 +7,7 @@ members = [
     "com-api-runtime-lola",
 
     "examples",
-    "examples/com-api-gen"
+    "examples/com-api-gen",
 ]
 
 [workspace.package]

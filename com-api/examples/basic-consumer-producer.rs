@@ -12,23 +12,23 @@
 use com_api::*;
 use com_api_gen::*;
 
-
 // Example struct demonstrating composition with VehicleConsumer
 pub struct VehicleMonitor<R: Runtime> {
     consumer: VehicleConsumer<R>,
+    producer: VehicleOfferedProducer<R>,
 }
 
 impl<R: Runtime> VehicleMonitor<R> {
     /// Create a new VehicleMonitor with a consumer
-    pub fn new(consumer: VehicleConsumer<R>) -> Self {
-        Self { consumer }
+    pub fn new(consumer: VehicleConsumer<R>, producer: VehicleOfferedProducer<R>) -> Self {
+        Self { consumer, producer }
     }
 
     /// Monitor tire data from the consumer
-    pub fn monitor_tire_data(self) -> Result<String> {
+    pub fn read_tire_data(&self) -> Result<String> {
         let subscribed = self.consumer.left_tire.subscribe(3)?;
         let mut sample_buf = SampleContainer::new();
-        
+
         match subscribed.try_receive(&mut sample_buf, 1) {
             Ok(0) => Err(Error::Fail),
             Ok(x) => {
@@ -38,40 +38,49 @@ impl<R: Runtime> VehicleMonitor<R> {
             Err(e) => Err(e),
         }
     }
+
+    pub fn write_tire_data(&self, tire: Tire) -> Result<()> {
+        let uninit_sample = self.producer.left_tire.allocate()?;
+        let sample = uninit_sample.write(tire);
+        sample.send()?;
+        Ok(())
+    }
 }
 
-
-fn use_consumer<R: Runtime>(runtime: &R)
-{
-    // Create service discovery
-    let consumer_discovery = runtime.find_service::<VehicleInterface>(InstanceSpecifier::new("My/Funk/ServiceName").unwrap());
+fn use_consumer<R: Runtime>(runtime: &R) -> VehicleConsumer<R> {
+    // Find all the avaiable service instances using ANY specifier
+    let consumer_discovery = runtime.find_service::<VehicleInterface>(FindServiceSpecifier::Any);
     let available_service_instances = consumer_discovery.get_available_instances().unwrap();
 
-    // Create consumer from first discovered service
     let consumer_builder = available_service_instances
         .into_iter()
-        .find(|desc| desc.get_instance_id() == 42)
+        .find(|desc| desc.get_instance_identifier() == "My/Funk/ServiceName")
         .unwrap();
+
     let consumer = consumer_builder.build().unwrap();
-    VehicleMonitor::new(consumer).monitor_tire_data().unwrap();
+    //
+    consumer
 }
 
-fn use_producer<R: Runtime>(runtime: &R)
-{
-    let producer_builder = runtime.producer_builder::<VehicleInterface, VehicleProducer<R>>(InstanceSpecifier::new("My/Funk/ServiceName").unwrap());
+fn use_producer<R: Runtime>(runtime: &R) -> VehicleOfferedProducer<R> {
+    let producer_builder = runtime.producer_builder::<VehicleInterface, VehicleProducer<R>>(
+        InstanceSpecifier::new("My/Funk/ServiceName").unwrap(),
+    );
     let producer = producer_builder.build().unwrap();
     let offered_producer = producer.offer().unwrap();
-
-    // Business logic
-    let uninit_sample = offered_producer.left_tire.allocate().unwrap();
-    let sample = uninit_sample.write(Tire {});
-    sample.send().unwrap();
+    offered_producer
 }
 
 fn run_with_runtime<R: Runtime>(name: &str, runtime: &R) {
     println!("\n=== Running with {} runtime ===", name);
-    use_producer(runtime);
-    use_consumer(runtime);
+
+    let monitor = VehicleMonitor::new(use_consumer(runtime), use_producer(runtime));
+
+    for _ in 0..5 {
+        monitor.write_tire_data(Tire {}).unwrap();
+        let tire_data = monitor.read_tire_data().unwrap();
+        println!("{}", tire_data);
+    }
     println!("=== {} runtime completed ===\n", name);
 }
 
@@ -112,7 +121,7 @@ mod test {
         use_consumer(&runtime);
     }
 
-    async fn async_data_processor_fn<R: Runtime>(subscribed: impl Subscription<Tire,R>) {
+    async fn async_data_processor_fn<R: Runtime>(subscribed: impl Subscription<Tire, R>) {
         let mut buffer = SampleContainer::new();
         for _ in 0..10 {
             match subscribed.receive(&mut buffer, 1, 1).await {
@@ -134,13 +143,14 @@ mod test {
         let mock_runtime_builder = MockRuntimeBuilderImpl::new();
         let runtime = Builder::<MockRuntimeImpl>::build(mock_runtime_builder).unwrap();
 
-        let consumer_discovery = runtime.find_service::<VehicleInterface>(InstanceSpecifier::new("My/Funk/ServiceName").unwrap());
+        let consumer_discovery =
+            runtime.find_service::<VehicleInterface>(FindServiceSpecifier::Any);
         let available_service_instances = consumer_discovery.get_available_instances().unwrap();
 
         // Create consumer from first discovered service
         let consumer_builder = available_service_instances
             .into_iter()
-            .find(|desc| desc.get_instance_id() == 42)
+            .find(|desc| desc.get_instance_identifier() == "My/Funk/ServiceName")
             .unwrap();
         let consumer = consumer_builder.build().unwrap();
 
