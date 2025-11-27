@@ -175,9 +175,6 @@ pub enum FindServiceSpecifier {
 /// Since it is yet to be proven whether this trait can be implemented safely (assumption is: no) it
 /// is unsafe for now. The expectation is that very few users ever need to implement this manually.
 
-// Reloc trait and its implementations have been moved to reloc.rs
-// Use `use reloc::Reloc;` to import it here and in other files.
-
 /// A `Sample` provides a reference to a memory buffer of an event with immutable value.
 ///
 /// By implementing the `Deref` trait implementations of the trait support the `.` operator for dereferencing.

@@ -8,6 +8,5 @@ license = "Apache-2.0"
 [dependencies]
 com-api-concept = { workspace = true }
 
-
 [dev-dependencies]
 futures = "0.3"

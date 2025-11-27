@@ -14,8 +14,12 @@
 pub unsafe trait Reloc {}
 
 unsafe impl Reloc for () {}
+unsafe impl Reloc for u8 {}
+unsafe impl Reloc for u16 {}
 unsafe impl Reloc for u32 {}
 unsafe impl Reloc for u64 {}
+unsafe impl Reloc for i8 {}
+unsafe impl Reloc for i16 {}
 unsafe impl Reloc for i32 {}
 unsafe impl Reloc for i64 {}
 unsafe impl Reloc for f32 {}
