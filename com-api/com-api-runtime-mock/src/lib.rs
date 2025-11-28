@@ -16,7 +16,6 @@
 
 #![allow(dead_code)]
 
-use com_api_concept::Reloc;
 use core::cmp::Ordering;
 use core::fmt::Debug;
 use core::future::Future;
@@ -29,8 +28,8 @@ use std::path::Path;
 
 use com_api_concept::{
     Builder, Consumer, ConsumerBuilder, ConsumerDescriptor, FindServiceSpecifier,
-    InstanceSpecifier, Interface, Producer, ProducerBuilder, Result, Runtime, SampleContainer,
-    ServiceDiscovery, Subscriber, Subscription,
+    InstanceSpecifier, Interface, Producer, ProducerBuilder, Reloc, Result, Runtime,
+    SampleContainer, ServiceDiscovery, Subscriber, Subscription,
 };
 
 pub struct MockRuntimeImpl {}
@@ -338,24 +337,6 @@ pub struct Publisher<T> {
     _data: PhantomData<T>,
 }
 
-impl<T> Default for Publisher<T>
-where
-    T: Reloc + Send,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T> Publisher<T>
-where
-    T: Reloc + Send,
-{
-    pub fn new() -> Self {
-        Self { _data: PhantomData }
-    }
-}
-
 impl<T> com_api_concept::Publisher<T, MockRuntimeImpl> for Publisher<T>
 where
     T: Reloc + Send + Debug,
@@ -453,7 +434,7 @@ pub struct SampleConsumerBuilder<I: Interface> {
 }
 
 impl<I: Interface> ConsumerDescriptor<MockRuntimeImpl> for SampleConsumerBuilder<I> {
-    fn get_instance_identifier(&self) -> String {
+    fn get_instance_identifier(&self) -> &InstanceSpecifier {
         todo!()
     }
 }
@@ -544,7 +525,12 @@ mod test {
 
     #[test]
     fn send_stuff() {
-        let test_publisher = super::Publisher::<u32>::new();
+        let provider_info = super::MockProviderInfo {
+            instance_specifier: com_api_concept::InstanceSpecifier::new("/test/publisher")
+                .expect("Invalid instance specifier"),
+        };
+        let test_publisher = super::Publisher::<u32>::new("test_publisher", provider_info)
+            .expect("Publisher creation failed");
         let sample = test_publisher.allocate().expect("Couldn't allocate sample");
         let sample = sample.write(42);
         sample.send().expect("Send failed for sample");

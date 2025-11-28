@@ -85,7 +85,7 @@ pub trait Runtime {
 
     fn find_service<I: Interface>(
         &self,
-        _instance_specifier: FindServiceSpecifier,
+        instance_specifier: FindServiceSpecifier,
     ) -> Self::ServiceDiscovery<I>;
 
     fn producer_builder<I: Interface, P: Producer<Self, Interface = I>>(
@@ -105,20 +105,37 @@ where
 ///
 /// The string shall describe where to find a certain instance of a service. Each level shall look
 /// like this
-/// <InterfaceName>:my/path/to/service_name
+///  /my/path/to/service_name
+/// validation for service name- /my/path/to/service_name
+/// allowed characters: a-z A-Z 0-9 and '/'
+/// Must start with leading/trailing check
+/// Not allowed consecutive '/' characters
+/// '_' is allowed in names
 #[derive(Clone, Debug)]
 pub struct InstanceSpecifier {
-    specifier: Option<String>,
+    specifier: String,
 }
 
 impl InstanceSpecifier {
     fn check_str(service_name: &str) -> bool {
-        // validation for service name- my/path/to/servicename
-        // allowed characters: a-z A-Z 0-9 and '/'
-        // no leading, trailing or consecutive '/'
+        // Must start with exactly one leading slash
+        if !service_name.starts_with('/') || service_name.starts_with("//") {
+            return false;
+        }
+
+        // Remove the single leading slash
+        let service_name = service_name.strip_prefix('/').unwrap();
+
+        // Check each character
+        let is_legal_char = |c| {
+            (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+        };
+
+        //validation of each path segment
         !service_name.is_empty()
             && service_name.split('/').all(|parts| {
-                !parts.is_empty() && parts.bytes().all(|part| part.is_ascii_alphanumeric())
+                // No empty segments (reject trailing "/" and "//" in the middle)
+                !parts.is_empty() && parts.chars().all(|c| is_legal_char(c))
             })
     }
 
@@ -131,7 +148,7 @@ impl InstanceSpecifier {
         let service_name = service_name.as_ref();
         if Self::check_str(service_name) {
             Ok(Self {
-                specifier: Some(service_name.to_string()),
+                specifier: service_name.to_string(),
             })
         } else {
             Err(Error::Fail)
@@ -148,16 +165,20 @@ impl TryFrom<&str> for InstanceSpecifier {
 
 impl AsRef<str> for InstanceSpecifier {
     fn as_ref(&self) -> &str {
-        self.specifier
-            .as_ref()
-            .map(String::as_str)
-            .unwrap_or("[ANY]")
+        &self.specifier
     }
 }
 /// Specifies whether to find a specific service instance or any available instance
 pub enum FindServiceSpecifier {
     Specific(InstanceSpecifier),
     Any,
+}
+
+/// Convert an InstanceSpecifier into a FindServiceSpecifier
+impl Into<FindServiceSpecifier> for InstanceSpecifier {
+    fn into(self) -> FindServiceSpecifier {
+        FindServiceSpecifier::Specific(self)
+    }
 }
 
 /// This trait shall ensure that we can safely use an instance of the implementing type across
@@ -302,7 +323,7 @@ pub trait ServiceDiscovery<I: Interface, R: Runtime + ?Sized> {
 }
 
 pub trait ConsumerDescriptor<R: Runtime + ?Sized> {
-    fn get_instance_identifier(&self) -> String;
+    fn get_instance_identifier(&self) -> &InstanceSpecifier;
 }
 
 pub trait ConsumerBuilder<I: Interface, R: Runtime + ?Sized>:
@@ -418,4 +439,49 @@ pub trait Subscription<T: Reloc + Send + Debug, R: Runtime + ?Sized> {
         new_samples: usize,
         max_samples: usize,
     ) -> impl Future<Output = Result<usize>> + Send;
+}
+
+mod tests {
+    #[test]
+    fn test_instance_specifier_validation() {
+        use super::InstanceSpecifier;
+        // Valid specifiers
+        let valid_specifiers = [
+            "/my/service",
+            "/my/path/to/service_name",
+            "/Service_123/AnotherPart",
+            "/A",
+            "/A/abc_123/Xyz",
+        ];
+
+        for spec in &valid_specifiers {
+            assert!(
+                InstanceSpecifier::check_str(spec),
+                "Expected '{}' to be valid",
+                spec
+            );
+        }
+
+        // Invalid specifiers
+        let invalid_specifiers = [
+            "my/service",           // No leading slash
+            "/my//service",         // Consecutive slashes
+            "/my/service/",         // Trailing slash
+            "/my/ser!vice",         // Illegal character '!'
+            "/my/ser vice",         // Illegal character ' '
+            "/",                    // Only root slash
+            "/my/path//to/service", // Consecutive slashes in the middle
+            "/my/path/to//",        // Trailing consecutive slashes
+            "//my/service",         // Leading consecutive slashes
+            "///my/service",        // Leading consecutive slashes
+        ];
+
+        for spec in &invalid_specifiers {
+            assert!(
+                !InstanceSpecifier::check_str(spec),
+                "Expected '{}' to be invalid",
+                spec
+            );
+        }
+    }
 }

@@ -335,24 +335,6 @@ pub struct Publisher<T> {
     _data: PhantomData<T>,
 }
 
-impl<T> Default for Publisher<T>
-where
-    T: Reloc + Send,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T> Publisher<T>
-where
-    T: Reloc + Send,
-{
-    pub fn new() -> Self {
-        Self { _data: PhantomData }
-    }
-}
-
 impl<T> com_api_concept::Publisher<T, LolaRuntimeImpl> for Publisher<T>
 where
     T: Reloc + Send + Debug,
@@ -461,7 +443,7 @@ pub struct SampleConsumerBuilder<I: Interface> {
 }
 
 impl<I: Interface> ConsumerDescriptor<LolaRuntimeImpl> for SampleConsumerBuilder<I> {
-    fn get_instance_identifier(&self) -> String {
+    fn get_instance_identifier(&self) -> &InstanceSpecifier {
         todo!()
     }
 }
@@ -540,7 +522,12 @@ mod test {
 
     #[test]
     fn send_stuff() {
-        let test_publisher = super::Publisher::<u32>::new();
+        let provider_info = super::LolaProviderInfo {
+            instance_specifier: com_api_concept::InstanceSpecifier::new("/test/publisher")
+                .expect("Invalid instance specifier"),
+        };
+        let test_publisher = super::Publisher::<u32>::new("test_publisher", provider_info)
+            .expect("Publisher creation failed");
         let sample = test_publisher.allocate().expect("Couldn't allocate sample");
         let sample = sample.write(42);
         sample.send().expect("Send failed for sample");
