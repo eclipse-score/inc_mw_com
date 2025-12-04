@@ -5,12 +5,17 @@ Incubation repository for interprocess communication framework
 
 Examples can be built from examples directory by passing desired IPC adapter as feature.
 
-For mock build:
+For build:
 ```
-inc_mw_com/com-api$ cargo run --example basic-consumer-producer --features "mock"
+inc_mw_com/com-api$ cargo build --example basic-consumer-producer 
 ```
 
-For LoLa build:
+For test:
 ```
-inc_mw_com/com-api$ cargo run --example basic-consumer-producer --features "lola"
+inc_mw_com/com-api$ cargo test --test basic-consumer-producer-test 
+```
+
+For Build and Run:
+```
+inc_mw_com/com-api$ cargo run --example basic-consumer-producer 
 ```

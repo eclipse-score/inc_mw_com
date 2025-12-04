@@ -64,24 +64,7 @@ dependencies = [
 name = "com-api-gen"
 version = "0.1.0"
 dependencies = [
- "com-api-gen-lola",
- "com-api-gen-mock",
-]
-
-[[package]]
-name = "com-api-gen-lola"
-version = "0.1.0"
-dependencies = [
  "com-api",
- "com-api-runtime-lola",
-]
-
-[[package]]
-name = "com-api-gen-mock"
-version = "0.1.0"
-dependencies = [
- "com-api",
- "com-api-runtime-mock",
 ]
 
 [[package]]

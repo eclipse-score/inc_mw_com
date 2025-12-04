@@ -7,7 +7,7 @@ members = [
     "com-api-runtime-lola",
 
     "examples",
-    "examples/com-api-gen"
+    "examples/com-api-gen",
 ]
 
 [workspace.package]
@@ -15,6 +15,10 @@ version = "0.1.0"
 edition = "2024"
 publish = ["common"]
 license = "Apache-2.0"
+
+[workspace.lints.clippy]
+std_instead_of_core   = "warn"
+alloc_instead_of_core = "warn"
 
 [workspace.dependencies]
 com-api = { path = "com-api"}

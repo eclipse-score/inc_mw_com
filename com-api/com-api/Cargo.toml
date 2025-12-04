@@ -5,11 +5,7 @@ edition = "2024"
 publish = ["common"]
 license = "Apache-2.0"
 
-[features]
-mock = ["com-api-runtime-mock"]
-lola = ["com-api-runtime-lola"]
-
 [dependencies]
 com-api-concept = { workspace = true }
-com-api-runtime-mock = { workspace = true, optional = true  }
-com-api-runtime-lola = { workspace = true, optional = true  }
+com-api-runtime-mock = { workspace = true }
+com-api-runtime-lola = { workspace = true }
