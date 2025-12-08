@@ -23,12 +23,25 @@
 //! ```
 
 use com_api::{
-    Consumer, Interface, OfferedProducer, Producer, Publisher, Reloc, Runtime, Subscriber,
+    Consumer, Interface, OfferedProducer, PlacementDefault, Producer, Publisher, Reloc, Runtime,
+    Subscriber,
 };
 
-#[derive(Debug)]
-pub struct Tire {}
+#[derive(Debug, Default)]
+pub struct Tire {
+    pub pressure: f32,
+}
 unsafe impl Reloc for Tire {}
+
+unsafe impl PlacementDefault for Tire {
+    fn placement_default(ptr: *mut Self) {
+        // For demonstration purposes, we just use the Default implementation.
+        unsafe {
+            let pressure = &raw mut (*ptr).pressure;
+            pressure.write(12.0);
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Exhaust {}
